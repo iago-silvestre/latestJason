@@ -2,12 +2,9 @@ package jason.asSyntax;
 
 import java.io.Serializable;
 import java.io.StringReader;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import jason.pl.PlanLibrary;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
@@ -42,7 +39,7 @@ public class Plan extends Structure implements Cloneable, Serializable {
 
     // new in JasonER
     private LogicalFormula    goalCondition;
-    private PlanLibrary subplans;
+    private PlanLibrary       subplans;
     private PlanLibrary       scope;
 
     private boolean isAtomic      = false;
@@ -172,14 +169,9 @@ public class Plan extends Structure implements Cloneable, Serializable {
         ListTerm l = new ListTermImpl();
         l.add(getLabel());
         l.add(getTrigger());
-        l.add(getContext() == null ? Literal.LTrue : getContext());
+        l.add(getContext());
         l.add(getBody());
         return l;
-    }
-
-    @Override
-    public List<Term> getTerms() {
-        return getAsListOfTerms().getAsList();
     }
 
     /** creates a plan from a list with four elements: [L, T, C, B] */
@@ -254,7 +246,8 @@ public class Plan extends Structure implements Cloneable, Serializable {
     public boolean equals(Object o) {
         if (o == this) return true;
 
-        if (o != null && o instanceof Plan p) {
+        if (o != null && o instanceof Plan) {
+            Plan p = (Plan) o;
             if (context == null && p.context != null) return false;
             if (context != null && p.context != null && !context.equals(p.context)) return false;
             return tevent.equals(p.tevent) && body.equals(p.body);
@@ -322,7 +315,6 @@ public class Plan extends Structure implements Cloneable, Serializable {
         p.tevent  = tevent.clone();
         p.context = context;
         p.body    = body.clonePB();
-        p.scope   = this.scope;
 
         p.setSrcInfo(srcInfo);
         p.isTerm = isTerm;
@@ -423,35 +415,4 @@ public class Plan extends Structure implements Cloneable, Serializable {
     public boolean hasGoalCondition() {
         return goalCondition != null;
     }
-    
-    @Override
-    public boolean hasSource() {
-        return getLabel().hasSource();
-    }
-    @Override
-    public boolean hasSource(Term agName) {
-        return getLabel().hasSource(agName);
-    }
-    
-    @Override
-    public ListTerm getSources() {
-        return getLabel().getSources();
-    }
-    
-    @Override
-    public Literal addSource(Term agName) {
-        getLabel().addSource(agName);
-        return this;
-    }
-    
-    @Override
-    public boolean delSource(Term agName) {
-        return getLabel().delSource(agName);
-    }
-
-    @Override
-    public void delSources() {
-        getLabel().delSources();
-    }
-
 }

@@ -11,10 +11,9 @@ import jason.asSyntax.Term;
   <p>Description: removes all desires of the agent. No event is
   produced.
 
-  <p>This action changes the agent's circumstance structure (1) by removing
-  from set of events (E) all events for goals (like +!g -!g +?g) and then (2) calling
+  <p>This action changes the agent's circumstance structure by simply emptying
+  the whole set of events (E) and then calling
   <code>.drop_all_intentions</code>.
-  It does not remove external events (which are not considered as a desire)
 
   <p>Example:<ul>
 
@@ -70,7 +69,7 @@ public class drop_all_desires extends drop_all_intentions {
 	@Override
     public Object execute(TransitionSystem ts, Unifier un, Term[] args) throws Exception {
         super.execute(ts, un, args);
-        ts.getC().clearEvents(true);
+        ts.getC().clearEvents();
         ts.getC().clearPendingEvents();
         return true;
     }

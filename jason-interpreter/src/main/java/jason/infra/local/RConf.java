@@ -1,6 +1,5 @@
 package jason.infra.local;
 
-/** configuration values for agent execution model (threads, pools, synch, asynch,...) */
 public enum RConf {
     THREADED("threaded"),
     POOL_SYNCH("pool"),

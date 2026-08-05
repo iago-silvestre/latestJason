@@ -1,7 +1,11 @@
 package jason.architecture;
 
 import java.io.Serializable;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 
 import jason.asSemantics.ActionExec;
@@ -23,10 +27,9 @@ import jason.runtime.RuntimeServices;
  * <p>
  * This class implements a Chain of Responsibilities design pattern.
  * Each member of the chain is a subclass of AgArch. The last arch in the chain is the infrastructure tier (Local, JADE, Saci, ...).
- * The getFirstAgArch method returns the first arch in the chain.
+ * The getUserAgArch method returns the first arch in the chain.
  *
- * Users can customise the architecture in a sub class of AgArch and
- * overriding some methods.
+ * Users can customise the architecture by overriding some methods of this class.
  */
 public class AgArch implements Comparable<AgArch>, Serializable {
 
@@ -72,7 +75,7 @@ public class AgArch implements Comparable<AgArch>, Serializable {
         List<String> all = new ArrayList<>();
         AgArch a = getFirstAgArch();
         while (a != null) {
-            all.add(a.getClass().getName());
+            all.add(0,a.getClass().getName());
             a = a.getNextAgArch();
         }
         return all;
@@ -93,23 +96,21 @@ public class AgArch implements Comparable<AgArch>, Serializable {
             successor.setFirstAgArch(arch);
     }
 
-    public void createCustomArchs(List<String> archs) throws Exception {
+    public void createCustomArchs(Collection<String> archs) throws Exception {
         if (archs == null)
             return;
-        for (int i=archs.size()-1; i>=0; i--) {
-            var agArchClass = archs.get(i);
+        for (String agArchClass: archs) {
             // user custom arch
-            if (!agArchClass.isEmpty() && !agArchClass.equals(AgArch.class.getName()) && !agArchClass.equals(LocalAgArch.class.getName())) {
+            if (!agArchClass.equals(AgArch.class.getName()) && !agArchClass.equals(LocalAgArch.class.getName())) {
                 try {
                     AgArch a = (AgArch) Class.forName(agArchClass).getConstructor().newInstance();
                     a.setTS(ts); // so a.init() can use TS
                     insertAgArch(a);
                     a.init();
-                    //System.out.println("creating arch "+agArchClass+ " "+getTS().getAgArch().getAgArchClassesChain());
                 } catch (Exception e) {
-                    System.out.println("Error creating custom agent architecture (class='"+agArchClass+"')."+e);
+                    System.out.println("Error creating custom agent aarchitecture."+e);
                     e.printStackTrace();
-                    ts.getLogger().log(Level.SEVERE,"Error creating custom agent architecture (class='"+agArchClass+"').", e);
+                    ts.getLogger().log(Level.SEVERE,"Error creating custom agent architecture.", e);
                 }
             }
         }
@@ -161,6 +162,14 @@ public class AgArch implements Comparable<AgArch>, Serializable {
             return successor.perceive();
     }
 
+    // LBB clone
+    public Boolean[] perceiveCP() {
+        if (successor == null)
+            return null;
+        else 
+            return successor.perceiveCP();            
+    }
+    
     /** Reads the agent's mailbox and adds messages into
         the agent's circumstance */
     public void checkMail() {
@@ -178,6 +187,7 @@ public class AgArch implements Comparable<AgArch>, Serializable {
         if (successor != null)
             successor.act(action);
     }
+
 
     /** called to inform that the action execution is finished */
     public void actionExecuted(ActionExec act) {
@@ -216,7 +226,10 @@ public class AgArch implements Comparable<AgArch>, Serializable {
             successor.wakeUpAct();
     }
 
-    /** return agent specific run time services (e.g. jade agents implements its differently for each agent) */
+    /**
+     * @deprecated use RuntimeServicesFactory.get instead
+     */
+    @Deprecated
     public RuntimeServices getRuntimeServices() {
         if (successor == null)
             return null;
@@ -279,7 +292,7 @@ public class AgArch implements Comparable<AgArch>, Serializable {
     public boolean equals(Object obj) {
         if (obj == null) return false;
         if (obj == this) return true;
-        if (obj instanceof AgArch arch) return this.getAgName().equals( arch.getAgName());
+        if (obj instanceof AgArch) return this.getAgName().equals( ((AgArch)obj).getAgName());
         return false;
     }
 
@@ -291,6 +304,6 @@ public class AgArch implements Comparable<AgArch>, Serializable {
         if (successor != null)
             return successor.getStatus();
         else
-            return new TreeMap<>();
+            return new HashMap<String, Object>();
     }
 }

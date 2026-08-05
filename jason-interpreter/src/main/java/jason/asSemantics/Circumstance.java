@@ -2,7 +2,6 @@ package jason.asSemantics;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
-import java.io.Serial;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -12,13 +11,21 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.LinkedHashMap;
 
-import jason.asSyntax.*;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
+import jason.asSemantics.Tuple;
+import jason.asSyntax.LogicalFormula;
+import jason.asSyntax.Plan;
+import jason.asSyntax.ASSyntax;
+import jason.asSyntax.Atom;
+import jason.asSyntax.Literal;
+import jason.asSyntax.PlanBody;
+import jason.asSyntax.PredicateIndicator;
+import jason.asSyntax.Term;
+import jason.asSyntax.Trigger;
 import jason.asSyntax.Trigger.TEOperator;
 import jason.asSyntax.Trigger.TEType;
 import jason.infra.local.LocalAgArch;
@@ -26,14 +33,18 @@ import jason.util.ToDOM;
 
 public class Circumstance implements Serializable, ToDOM {
 
-    @Serial
     private static final long serialVersionUID = 1L;
 
     private   Queue<Event>             E;
     private   Queue<Intention>         I;
     protected ActionExec               A;
     private   Queue<Message>           MB;
-    protected List<Option>             RP; // relevant plans
+
+    // Next two for Expedited-Jason:
+    public Map<PredicateIndicator, Boolean> CPM; 
+    public List<PlanBody> CRL;
+
+    protected List<Option>             RP;
     protected List<Option>             AP;
     protected Event                    SE;
     protected Option                   SO;
@@ -49,15 +60,14 @@ public class Circumstance implements Serializable, ToDOM {
     private Map<String, Intention>     PI; // pending intentions, intentions suspended by any other reason
     private Map<String, Event>         PE; // pending events, events suspended by .suspend
 
-    private PlanBody                   lastDeed; // last executed deed of an intention
-
     private Queue<CircumstanceListener> listeners = new ConcurrentLinkedQueue<>();
 
     private TransitionSystem ts = null;
 
-    public  Lock syncApPlanSense = new ReentrantLock();
+    public transient Object syncApPlanSense = new Object();
 
     public Circumstance() {
+        syncApPlanSense = new Object();
         create();
         reset();
     }
@@ -73,9 +83,9 @@ public class Circumstance implements Serializable, ToDOM {
     }
 
 
-    @Serial
     private void readObject(ObjectInputStream inputStream) throws IOException, ClassNotFoundException {
         inputStream.defaultReadObject();
+        syncApPlanSense = new Object();
     }
 
     public void setTS(TransitionSystem ts) {
@@ -92,6 +102,9 @@ public class Circumstance implements Serializable, ToDOM {
         PI = new ConcurrentHashMap<>();
         PE = new ConcurrentHashMap<>();
         FA = new ConcurrentLinkedQueue<>();
+
+        CPM = new LinkedHashMap<>();
+        CRL = new ArrayList<>(); 
     }
 
     /** set null for A, RP, AP, SE, SO, and SI */
@@ -114,7 +127,6 @@ public class Circumstance implements Serializable, ToDOM {
     public void resetAct() {
         A  = null;
         SI = null;
-        lastDeed = null;
     }
 
     public Event addAchvGoal(Literal l, Intention i) {
@@ -124,7 +136,7 @@ public class Circumstance implements Serializable, ToDOM {
     }
 
     public void addExternalEv(Trigger trig) {
-        addEvent(new Event(trig));
+        addEvent(new Event(trig, Intention.EmptyInt));
     }
 
     /** Events */
@@ -195,22 +207,6 @@ public class Circumstance implements Serializable, ToDOM {
     }
 
     public void clearEvents() {
-        clearEvents(false);
-        // notify listeners
-        /*if (hasListener())
-            for (CircumstanceListener el : listeners) {
-                for (Event ev: E)
-                    if (ev.getIntention() != null)
-                        el.intentionDropped(ev.getIntention());
-                if (AE != null && AE.getIntention() != null)
-                    el.intentionDropped(AE.getIntention());
-            }
-
-        E.clear();
-        AE = null;*/
-    }
-
-    public void clearEvents(boolean onlyGoals) {
         // notify listeners
         if (hasListener())
             for (CircumstanceListener el : listeners) {
@@ -221,16 +217,7 @@ public class Circumstance implements Serializable, ToDOM {
                     el.intentionDropped(AE.getIntention());
             }
 
-        if (onlyGoals) {
-            var ie = E.iterator();
-            while (ie.hasNext()) {
-                Event e = ie.next();
-                if (e.getTrigger().isGoal())
-                    ie.remove();
-            }
-        } else {
-            E.clear();
-        }
+        E.clear();
         AE = null;
     }
 
@@ -442,13 +429,6 @@ public class Circumstance implements Serializable, ToDOM {
         return PI;
     }
 
-    public String getPendingIntentionKey(Intention i) {
-        for (var k: PI.keySet())
-            if (PI.get(k).equals(i))
-                return k;
-        return null;
-    }
-
     public boolean hasPendingIntention() {
         return PI != null && !PI.isEmpty();
     }
@@ -609,9 +589,6 @@ public class Circumstance implements Serializable, ToDOM {
         //}
         return false;
     }
-
-    private Lock faLock = new ReentrantLock();
-    public Lock getFALock() { return faLock; }
 
     public Queue<ActionExec> getFeedbackActions() {
         return FA;
@@ -788,9 +765,7 @@ public class Circumstance implements Serializable, ToDOM {
 
                     while (evtIterator.hasNext()) {
                         actInt = evtIterator.next().getIntention();
-                        if (actInt == bySelEvt || actInt == bySelInt)
-                            continue;
-                        if (actInt != null) {
+                        if (actInt != null && !actInt.equals(getSelectedIntention())) {
                             actInt.setPlace( IntentionPlace.EventQueue );
                             return;
                         }
@@ -805,8 +780,6 @@ public class Circumstance implements Serializable, ToDOM {
 
                     while (pendEvtIterator.hasNext()) {
                         actInt = pendEvtIterator.next().getIntention();
-                        if (actInt == bySelEvt || actInt == bySelInt)
-                            continue;
                         if (actInt != null) {
                             actInt.setPlace( IntentionPlace.PendingEvents );
                             return;
@@ -824,8 +797,6 @@ public class Circumstance implements Serializable, ToDOM {
 
                         while (pendActIterator.hasNext()) {
                             actInt = pendActIterator.next().getIntention();
-                            if (actInt == bySelEvt || actInt == bySelInt)
-                                continue;
                             if (actInt != null) {
                                 actInt.setPlace( IntentionPlace.PendingActions );
                                 return;
@@ -935,9 +906,6 @@ public class Circumstance implements Serializable, ToDOM {
         return SO;
     }
 
-    protected void setLastDeed(PlanBody d) { lastDeed = d; }
-    public PlanBody getLastDeed() { return lastDeed; }
-
     /** clone E, I, MB, PA, PI, FA, and AI */
     public Circumstance clone() {
         Circumstance c = new Circumstance();
@@ -1038,10 +1006,9 @@ public class Circumstance implements Serializable, ToDOM {
         List<Object> alreadyIn = new ArrayList<>();
 
         // option
-        var op = getSelectedOption();
-        if (op != null) {
-            alreadyIn.add(op);
-            e = op.getAsDOM(document);
+        if (getSelectedOption() != null) {
+            alreadyIn.add(getSelectedOption());
+            e = getSelectedOption().getAsDOM(document);
             e.setAttribute("relevant", "true");
             e.setAttribute("applicable", "true");
             e.setAttribute("selected", "true");
@@ -1144,13 +1111,10 @@ public class Circumstance implements Serializable, ToDOM {
             if (getPendingActions().values().contains(getAction())) {
                 e.setAttribute("pending", "true");
             }
-            getFALock().lock();
-            try {
+            synchronized (getFeedbackActions()) {
                 if (getFeedbackActions().contains(getAction())) {
                     e.setAttribute("feedback", "true");
                 }
-            } finally {
-                getFALock().unlock();
             }
             acts.appendChild(e);
         }
@@ -1170,18 +1134,13 @@ public class Circumstance implements Serializable, ToDOM {
 
         // FA
         if (hasFeedbackAction()) {
-            getFALock().lock();
-            try {
-                for (ActionExec o : getFeedbackActions()) {
-                    if (!alreadyIn.contains(o)) {
-                        alreadyIn.add(o);
-                        e = o.getAsDOM(document);
-                        e.setAttribute("feedback", o.getResult() + "");
-                        acts.appendChild(e);
-                    }
+            for (ActionExec o: getFeedbackActions()) {
+                if (!alreadyIn.contains(o)) {
+                    alreadyIn.add(o);
+                    e = o.getAsDOM(document);
+                    e.setAttribute("feedback", "true");
+                    acts.appendChild(e);
                 }
-            } finally {
-                getFALock().unlock();
             }
         }
 
@@ -1214,5 +1173,5 @@ public class Circumstance implements Serializable, ToDOM {
         s.append("  FA="+FA+".");
         return s.toString();
     }
-
+    
 }

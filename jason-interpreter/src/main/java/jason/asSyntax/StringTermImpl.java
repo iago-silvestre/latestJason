@@ -2,7 +2,6 @@ package jason.asSyntax;
 
 import jason.asSyntax.parser.as2j;
 
-import java.io.Serial;
 import java.io.StringReader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -20,9 +19,8 @@ import org.w3c.dom.Element;
  */
 public final class StringTermImpl extends DefaultTerm implements StringTerm {
 
-    @Serial
     private static final long serialVersionUID = 1L;
-    private static final Logger logger = Logger.getLogger(StringTermImpl.class.getName());
+    private static Logger logger = Logger.getLogger(StringTermImpl.class.getName());
 
     private final String value;
 
@@ -74,7 +72,8 @@ public final class StringTermImpl extends DefaultTerm implements StringTerm {
     public boolean equals(Object t) {
         if (t == this) return true;
 
-        if (t instanceof StringTerm st) {
+        if (t != null && t instanceof StringTerm) {
+            StringTerm st = (StringTerm)t;
             if (value == null)
                 return st.getString() == null;
             else
@@ -107,7 +106,7 @@ public final class StringTermImpl extends DefaultTerm implements StringTerm {
 
     /** get as XML */
     public Element getAsDOM(Document document) {
-        Element u = document.createElement("string-term");
+        Element u = (Element) document.createElement("string-term");
         u.appendChild(document.createTextNode(toString()));
         return u;
     }

@@ -6,7 +6,11 @@ import java.util.Queue;
 
 import jason.JasonException;
 import jason.architecture.AgArch;
-import jason.asSemantics.*;
+import jason.asSemantics.Agent;
+import jason.asSemantics.Intention;
+import jason.asSemantics.InternalAction;
+import jason.asSemantics.Option;
+import jason.asSemantics.TransitionSystem;
 import jason.asSyntax.ASSyntax;
 import jason.asSyntax.ArithFunctionTerm;
 import jason.asSyntax.InternalActionLiteral;
@@ -37,11 +41,11 @@ public class TSTest extends TestCase {
         Trigger te1 = ASSyntax.parseTrigger("+a(10)");
 
         try {
-            List<Option> rp = ts.getAg().relevantPlans(te1, null);
+            List<Option> rp = ts.relevantPlans(te1, null);
             // System.out.println("RP="+rp);
             assertEquals(rp.size(), 2);
 
-            rp = ts.getAg().applicablePlans(rp);
+            rp = ts.applicablePlans(rp);
             // System.out.println("AP="+rp);
             assertEquals(rp.size(), 1);
 
@@ -55,11 +59,11 @@ public class TSTest extends TestCase {
         Trigger te2 = ASSyntax.parseTrigger("+a(20)");
 
         try {
-            List<Option> rp = ts.getAg().relevantPlans(te2, null);
+            List<Option> rp = ts.relevantPlans(te2, null);
             // System.out.println("RP="+rp);
             assertEquals(rp.size(), 2);
 
-            rp = ts.getAg().applicablePlans(rp);
+            rp = ts.applicablePlans(rp);
             // System.out.println("AP="+rp);
             assertEquals(rp.size(), 1);
 
@@ -113,7 +117,7 @@ public class TSTest extends TestCase {
         public void t() {}
     }
     class Test2 extends Agent {
-        public Option selectOption(List<Option> options) throws NoOptionException {
+        public Option selectOption(List<Option> options) {
             return super.selectOption(options);
         }
     }
@@ -122,7 +126,7 @@ public class TSTest extends TestCase {
         Agent a = new Agent();
 
         a.initAg();
-        a.loadInitialAS("src/test/java/jason/asl/ag3.asl");
+        a.load("examples/auction/ag3.asl");
         String p1 = a.getPL().toString();
         String b1 = a.getBB().toString();
         InternalAction ia1 = ((InternalActionLiteral)a.getPL().get("prop_alliance").getBody().getBodyTerm()).getIA(a);

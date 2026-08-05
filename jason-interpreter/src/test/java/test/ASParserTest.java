@@ -66,13 +66,14 @@ public class ASParserTest extends TestCase {
         ag.initAg();
 
         ag.parseAS(new File("src/main/resources/asl/kqmlPlans.asl"));
-        ag.parseAS(new File("src/test/java/jason/asl/ag1.asl"));
+        ag.parseAS(new File("examples/auction/ag1.asl"));
         Plan p = ag.getPL().get("lbid");
         //System.out.println(ag.getPL());
         assertNotNull(p);
         assertEquals(p.getBody().getPlanSize(), 1);
         assertEquals(((PlanBody)p.getBody()).getBodyType(), PlanBody.BodyType.internalAction);
-        ag.parseAS(new File("src/test/java/jason/asl/ag3.asl"));
+        ag.parseAS(new File("examples/auction/ag2.asl"));
+        ag.parseAS(new File("examples/auction/ag3.asl"));
     }
 
     public void testLogicalExpr() throws Exception {
@@ -322,8 +323,13 @@ public class ASParserTest extends TestCase {
     }
 
     public void testParsingAllSources() {
-        parseDir(new File("../examples"));
-        parseDir(new File("../demos"));
+        parseDir(new File("./examples"));
+        parseDir(new File("./demos"));
+        parseDir(new File("./applications/jason-moise"));
+        parseDir(new File("./applications/jason-team"));
+        parseDir(new File("./doc/mini-tutorial"));
+        parseDir(new File("../Jason-applications/examples-site-jBook"));
+        parseDir(new File("../Jason-applications/Tests"));
     }
 
     public void parseDir(File dir) {

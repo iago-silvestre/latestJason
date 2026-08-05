@@ -64,8 +64,6 @@ public class RunJadeMAS extends RunLocalMAS {
         RunJadeMAS r = new RunJadeMAS();
         runner = r;
         r.init(args);
-        r.registerInRMI();
-        r.registerWebMindInspector();
         r.create();
         r.start();
         r.waitEnd();
@@ -78,9 +76,6 @@ public class RunJadeMAS extends RunLocalMAS {
             initArgs.add(args[i]);
             if (args[i].equals("-container-name")) {
                 targetContainer = args[i+1];
-            }
-            if (args[i].equals("-sniffer")) {
-                Config.get().put(Config.JADE_SNIFFER, "true");
             }
         }
         return super.init(args);
@@ -97,16 +92,16 @@ public class RunJadeMAS extends RunLocalMAS {
         }
     }
 
-//    public void addInitArgs(String[] args) {
-//        for (String a: args) {
-//            initArgs.addAll( Arrays.asList(a.split(" ")));
-//        }
-//        for (String a: initArgs) {
-//            if (a.equals("-sniffer")) {
-//                Config.get().put(Config.JADE_SNIFFER, "true");
-//            }
-//        }
-//    }
+    public void addInitArgs(String[] args) {
+        for (String a: args) {
+            initArgs.addAll( Arrays.asList(a.split(" ")));
+        }
+        for (String a: initArgs) {
+            if (a.equals("-sniffer")) {
+                Config.get().put(Config.JADE_SNIFFER, "true");
+            }
+        }
+    }
 
     public void createButtons() {
         createStopButton();

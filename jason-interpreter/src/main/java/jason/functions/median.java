@@ -24,7 +24,7 @@ import java.util.List;
 @see jason.functions.Min
 @see jason.functions.Max
 @see jason.functions.Sum
-@see jason.functions.mean
+@see jason.functions.Average
 
 */
 public class median extends DefaultArithFunction  {

@@ -1,10 +1,50 @@
 package jason.asSemantics;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.io.Reader;
+import java.io.Serializable;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+
 import jason.JasonException;
 import jason.RevisionFailedException;
 import jason.architecture.AgArch;
 import jason.architecture.MindInspectorWeb;
-import jason.asSyntax.*;
+import jason.asSyntax.ASSyntax;
+import jason.asSyntax.ArithFunctionTerm;
+import jason.asSyntax.InternalActionLiteral;
+import jason.asSyntax.Literal;
+import jason.asSyntax.LogicalFormula;
+import jason.asSyntax.Plan;
+import jason.asSyntax.PlanLibrary;
+import jason.asSyntax.Rule;
+import jason.asSyntax.Term;
+import jason.asSyntax.Trigger;
 import jason.asSyntax.Trigger.TEOperator;
 import jason.asSyntax.Trigger.TEType;
 import jason.asSyntax.directives.FunctionRegister;
@@ -16,29 +56,10 @@ import jason.bb.StructureWrapperForLiteral;
 import jason.functions.Count;
 import jason.functions.RuleToFunction;
 import jason.mas2j.ClassParameters;
-import jason.pl.PlanLibrary;
 import jason.runtime.Settings;
 import jason.runtime.SourcePath;
 import jason.util.Config;
 import jason.util.ToDOM;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import java.io.*;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.*;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 
 
@@ -49,7 +70,6 @@ import java.util.logging.Logger;
  */
 public class Agent implements Serializable, ToDOM {
 
-    @Serial
     private static final long serialVersionUID = -2628324957954474455L;
 
     // Members
@@ -79,8 +99,8 @@ public class Agent implements Serializable, ToDOM {
     }
 
     /**
-     * Set up the default agent configuration.
-     * <p>
+     * Setup the default agent configuration.
+     *
      * Creates the agent class defined by <i>agClass</i>, default is jason.asSemantics.Agent.
      * Creates the TS for the agent.
      * Creates the belief base for the agent.
@@ -91,7 +111,7 @@ public class Agent implements Serializable, ToDOM {
 
             new TransitionSystem(ag, null, stts, arch);
 
-            BeliefBase bb;
+            BeliefBase bb = null;
             if (bbPars == null)
                 bb = new DefaultBeliefBase();
             else
@@ -102,16 +122,11 @@ public class Agent implements Serializable, ToDOM {
 
             if (bbPars != null)
                 bb.init(ag, bbPars.getParametersArray());
-            ag.loadInitialAS(asSrc); // load the source code of the agent
+            ag.load(asSrc); // load the source code of the agent
             return ag;
         //} catch (Exception e) {
         //    throw new JasonException("as2j: error creating the customised Agent class! - "+agClass, e);
         //}
-    }
-
-    private boolean considerToAddMIForThisAgent = true;
-    public void setConsiderToAddMIForThisAgent(boolean add) {
-        considerToAddMIForThisAgent = add;
     }
 
     /** Initialises the TS and other components of the agent */
@@ -131,68 +146,130 @@ public class Agent implements Serializable, ToDOM {
         //if (ts.getSettings().hasQueryProfiling()) qProfiling = new QueryProfiling(this);
         //if (ts.getSettings().hasQueryCache())     qCache = new QueryCacheSimple(this, qProfiling);
 
-        if (considerToAddMIForThisAgent)
-            addToMindInspectorWeb();
+        if (! "false".equals(Config.get().getProperty(Config.START_WEB_MI))) MindInspectorWeb.get().registerAg(this);
     }
 
-    public void addToMindInspectorWeb() {
-        if (! "false".equals(Config.get().getProperty(Config.START_WEB_MI)))
-            MindInspectorWeb.get().registerAg(this);
-    }
-
-    /** parse and load the initial agent code + kqml plans + project bels and goals, asSrc may be null */
-    public void loadInitialAS(String asSrc) throws Exception {
-        loadAS(asSrc);
-
-        addInitialBelsFromProjectInBB();
-        addInitialBelsInBB();
-        addInitialGoalsFromProjectInBB();
-        addInitialGoalsInTS();
-        fixAgInIAandFunctions(this); // used to fix agent reference in functions used inside includes
-
-        loadKqmlPlans();
-        addInitialBelsInBB(); // in case kqml plan file has some belief
-    }
-
-    /**
-     * parse and load some agent code, asSrc may be null
-     * it does not load kqml default plans and does not trigger initial beliefs and goals
+    /** parse and load the agent code, asSrc may be null
+     * @deprecated use initAg() and load(src)
      */
-    public void loadAS(String asSrc) throws Exception {
-        if (asSrc != null && !asSrc.isEmpty()) {
-            asSrc = asSrc.replaceAll("\\\\", "/");
+    @Deprecated
+    public void initAg(String asSrc) throws Exception {
+        initAg();
+        load(asSrc);
+    }
 
-            if (asSrc.startsWith(SourcePath.CRPrefix)) {
-                // loads the class from a jar file (for example)
-                parseAS(Agent.class.getResource(asSrc.substring(SourcePath.CRPrefix.length())).openStream() , asSrc);
-            } else {
-                // check whether source is a URL string
-                try {
-                    parseAS(new URL(asSrc));
-                } catch (MalformedURLException e) {
-                    parseAS(new File(asSrc));
+    /** parse and load the initial agent code, asSrc may be null */
+    public void load(String asSrc) throws Exception {
+        // set the agent
+        //try {
+            //boolean parsingOk = true;
+            if (asSrc != null && !asSrc.isEmpty()) {
+                asSrc = asSrc.replaceAll("\\\\", "/");
+                setASLSrc(asSrc);
+
+                if (asSrc.startsWith(SourcePath.CRPrefix)) {
+                    // loads the class from a jar file (for example)
+                    parseAS(Agent.class.getResource(asSrc.substring(SourcePath.CRPrefix.length())).openStream() , asSrc);
+                } else {
+                    // check whether source is an URL string
+                    try {
+                        //parsingOk =
+                        parseAS(new URL(asSrc));
+                    } catch (MalformedURLException e) {
+                        //parsingOk =
+                        parseAS(new File(asSrc));
+                    }
                 }
             }
-        }
 
-        if (getPL().hasMetaEventPlans())
-            getTS().addGoalListener(new GoalListenerForMetaEvents(getTS()));
 
-        setASLSrc(asSrc);
+            //if (parsingOk) {
+                if (getPL().hasMetaEventPlans())
+                    getTS().addGoalListener(new GoalListenerForMetaEvents(getTS()));
+
+                addInitialBelsFromProjectInBB();
+                addInitialBelsInBB();
+                addInitialGoalsFromProjectInBB();
+                addInitialGoalsInTS();
+                fixAgInIAandFunctions(this); // used to fix agent reference in functions used inside includes
+            //} else {
+            //    throw new JasonException("Error loading code from "+asSrc);
+            //}
+
+            loadKqmlPlans();
+            addInitialBelsInBB(); // in case kqml plan file has some belief
+
+        /*} catch (jason.asSyntax.parser.ParseException e) {
+            //logger.log(Level.SEVERE, "Error loading code from "+asSrc , e);
+            throw e;
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error loading code from "+asSrc, e);
+            throw new JasonException("Error loading code from "+asSrc + " ---- " + e);
+        }*/
     }
 
     /** parse and load asl code */
-    /*public void load(InputStream in, String sourceId) throws Exception {
-        parseAS(in, sourceId);
+    public void load(InputStream in, String sourceId) throws Exception {
+        //try {
+            parseAS(in, sourceId);
 
-        if (getPL().hasMetaEventPlans())
-            getTS().addGoalListener(new GoalListenerForMetaEvents(getTS()));
+            if (getPL().hasMetaEventPlans())
+                getTS().addGoalListener(new GoalListenerForMetaEvents(getTS()));
 
-        addInitialBelsInBB();
-        addInitialGoalsInTS();
-        fixAgInIAandFunctions(this); // used to fix agent reference in functions used inside includes
-    }*/
+            addInitialBelsInBB();
+            addInitialGoalsInTS();
+            fixAgInIAandFunctions(this); // used to fix agent reference in functions used inside includes
+        //} catch (Exception e) {
+         //   e.printStackTrace();
+        //    throw new JasonException("Error loading plans from stream " + e);
+        //}
+    }
 
+    /**
+     * Clear Agent's Beliefs and Plan Library
+     */
+    public void clearAg() {
+        if (bb != null) bb.clear();
+        if (pl != null) pl.clear();
+    }
+
+    /**
+     * only parse and load the initial agent code, asSrc may be null
+     * it does not load kqml default plans and do not trigger initial beliefs and goals
+     */
+    public void loadAgSrc(String asSrc) throws Exception {
+        // set the agent
+        //try {
+            //boolean parsingOk = true;
+            if (asSrc != null && !asSrc.isEmpty()) {
+                asSrc = asSrc.replaceAll("\\\\", "/");
+
+                if (asSrc.startsWith(SourcePath.CRPrefix)) {
+                    // loads the class from a jar file (for example)
+                    parseAS(Agent.class.getResource(asSrc.substring(SourcePath.CRPrefix.length())).openStream() , asSrc);
+                } else {
+                    // check whether source is an URL string
+                    try {
+                        //parsingOk =
+                        parseAS(new URL(asSrc));
+                    } catch (MalformedURLException e) {
+                        //parsingOk =
+                        parseAS(new File(asSrc));
+                    }
+                }
+            }
+
+            //if (parsingOk) {
+                if (getPL().hasMetaEventPlans())
+                    getTS().addGoalListener(new GoalListenerForMetaEvents(getTS()));
+            //}
+
+            setASLSrc(asSrc);
+        /*} catch (Exception e) {
+            logger.log(Level.SEVERE, "Error loading code from "+asSrc, e);
+            throw new JasonException("Error loading code from "+asSrc + " ---- " + e);
+        }*/
+    }
 
     public void loadKqmlPlans() throws Exception {
         // load kqml plans at the end of the ag PL
@@ -218,20 +295,37 @@ public class Agent implements Serializable, ToDOM {
         }
     }
 
-    /**
-     * Clear Agent's Beliefs and Plan Library
+    /** @deprecated Prefer the initAg method with only the source code of the agent as parameter.
+     *
+     *  A call of this method like
+     *     <pre>
+     *     TransitionSystem ts = ag.initAg(arch, bb, asSrc, stts)
+     *     </pre>
+     *  can be replaced by
+     *     <pre>
+     *     new TransitionSystem(ag, new Circumstance(), stts, arch);
+     *     ag.setBB(bb); // only if you use a custom BB
+     *     ag.initAg(asSrc);
+     *     TransitionSystem ts = ag.getTS();
+     *     </pre>
      */
-    public void clearAgMemory() {
-        if (bb != null) bb.clear();
-        if (pl != null) pl.clear();
+    @Deprecated
+    public TransitionSystem initAg(AgArch arch, BeliefBase bb, String asSrc, Settings stts) throws JasonException {
+        try {
+            if (bb != null)
+                setBB(bb);
+            new TransitionSystem(this, null, stts, arch);
+            initAg(asSrc);
+            return ts;
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error creating the agent class!", e);
+            throw new JasonException("Error creating the agent class! - " + e);
+        }
     }
 
     public void stopAg() {
-        bb.getLock().lock();
-        try {
+        synchronized (bb.getLock()) {
             bb.stop();
-        } finally {
-            bb.getLock().unlock();
         }
 
         //if (qProfiling != null)
@@ -257,26 +351,24 @@ public class Agent implements Serializable, ToDOM {
      *  A new TS is created (based on the cloned circumstance).
      */
     public Agent clone(AgArch arch) {
-        Agent a;
+        Agent a = null;
         try {
             a = this.getClass().getConstructor().newInstance();
         } catch (InstantiationException e1) {
-            logger.severe(" cannot create derived class" + e1);
+            logger.severe(" cannot create derived class" +e1);
             return null;
         } catch (Exception e2) {
-            logger.severe(" cannot create derived class" + e2);
+            logger.severe(" cannot create derived class" +e2);
             return null;
         }
-        return cloneInto(arch, a);
-    }
 
-    public Agent cloneInto(AgArch arch, Agent a) {
         a.setLogger(arch);
         if (this.getTS().getSettings().verbose() >= 0)
             a.logger.setLevel(this.getTS().getSettings().logLevel());
 
-        a.bb = this.bb.clone();
-
+        synchronized (getBB().getLock()) {
+            a.bb = this.bb.clone();
+        }
         a.pl = this.pl.clone();
         try {
             fixAgInIAandFunctions(a);
@@ -285,53 +377,46 @@ public class Agent implements Serializable, ToDOM {
         }
         a.aslSource = this.aslSource;
         a.internalActions = new HashMap<>();
-        a.setTS(new TransitionSystem(a,
-                this.getTS().getC().clone(),
-                this.getTS().getSettings(),
-                arch));
-        a.getTS().setLogger(arch);
+        a.setTS(new TransitionSystem(a, this.getTS().getC().clone(), this.getTS().getSettings(), arch));
         if (a.getPL().hasMetaEventPlans())
             a.getTS().addGoalListener(new GoalListenerForMetaEvents(a.getTS()));
 
-        a.initAg(); // for initDefaultFunctions() and for overridden/custom agent
+        a.initAg(); //for initDefaultFunctions() and for overridden/custom agent
         return a;
     }
 
     private void fixAgInIAandFunctions(Agent a) throws Exception {
         // find all internal actions and functions and change the pointer for agent
-        getPL().getLock().lock();
-        try {
+        synchronized (getPL().getLock()) {
             for (Plan p: a.getPL()) {
                 // search context
-                if (p.getContext() instanceof Literal l)
-                    fixAgInIAandFunctions(a, l);
+                if (p.getContext() instanceof Literal)
+                    fixAgInIAandFunctions(a, (Literal)p.getContext());
 
                 // search body
-                if (p.getBody() instanceof Literal l)
-                    fixAgInIAandFunctions(a, l);
+                if (p.getBody() instanceof Literal)
+                    fixAgInIAandFunctions(a, (Literal)p.getBody());
             }
-        } finally {
-            getPL().getLock().unlock();
         }
     }
 
     private void fixAgInIAandFunctions(Agent a, Literal l) throws Exception {
         // if l is internal action/function
-        if (l instanceof InternalActionLiteral ia) {
-            ia.setIA(null); // reset the IA in the literal, the IA there will be updated next getIA call
+        if (l instanceof InternalActionLiteral) {
+            ((InternalActionLiteral)l).setIA(null); // reset the IA in the literal, the IA there will be updated next getIA call
         }
-        if (l instanceof ArithFunctionTerm af) {
-            af.setAgent(a);
+        if (l instanceof ArithFunctionTerm) {
+            ((ArithFunctionTerm)l).setAgent(a);
         }
-        if (l instanceof Rule r) {
-            LogicalFormula f = r.getBody();
-            if (f instanceof Literal fl) {
-                fixAgInIAandFunctions(a, fl);
+        if (l instanceof Rule) {
+            LogicalFormula f = ((Rule)l).getBody();
+            if (f instanceof Literal) {
+                fixAgInIAandFunctions(a, (Literal)f);
             }
         }
         for (int i=0; i<l.getArity(); i++) {
-            if (l.getTerm(i) instanceof Literal tl)
-                fixAgInIAandFunctions(a, tl);
+            if (l.getTerm(i) instanceof Literal)
+                fixAgInIAandFunctions(a, (Literal)l.getTerm(i));
         }
     }
 
@@ -348,11 +433,11 @@ public class Agent implements Serializable, ToDOM {
         if (scheduler == null) {
             int n;
             try {
-                n = Integer.parseInt( Config.get().get(Config.NB_TH_SCH).toString() );
+                n = Integer.valueOf( Config.get().get(Config.NB_TH_SCH).toString() );
             } catch (Exception e) {
-                n = 3;
+                n = 2;
             }
-            scheduler = Executors.newScheduledThreadPool(n, Thread.ofVirtual().factory());
+            scheduler = Executors.newScheduledThreadPool(n);
         }
         return scheduler;
     }
@@ -374,14 +459,34 @@ public class Agent implements Serializable, ToDOM {
         parseAS(asURL, asURL.toString());
     }
     public void parseAS(URL asURL, String sourceId) throws Exception {
-        parseAS(asURL.openStream(), sourceId);
-        logger.fine("as2j: AgentSpeak program '" + asURL + "' parsed successfully!");
+        //try {
+            parseAS(asURL.openStream(), sourceId);
+            logger.fine("as2j: AgentSpeak program '" + asURL + "' parsed successfully!");
+        /*    return true;
+        } catch (IOException e) {
+            logger.log(Level.SEVERE, "as2j: the AgentSpeak source file '"+asURL+"' was not found!");
+        } catch (ParseException e) {
+            logger.log(Level.SEVERE, "as2j: parsing error: " + e.getMessage());
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "as2j: parsing error: \"" + asURL + "\"", e);
+        }
+        return false;*/
     }
 
     /** Adds beliefs and plans form a file */
     public void parseAS(File asFile) throws Exception {
-        parseAS(new FileInputStream(asFile), asFile.getName());
-        logger.fine("as2j: AgentSpeak program '" + asFile + "' parsed successfully!");
+        //try {
+            parseAS(new FileInputStream(asFile), asFile.getName());
+            logger.fine("as2j: AgentSpeak program '" + asFile + "' parsed successfully!");
+        /*    return true;
+        } catch (FileNotFoundException e) {
+            logger.log(Level.SEVERE, "as2j: the AgentSpeak source file '"+asFile+"' was not found!");
+        } catch (ParseException e) {
+            logger.log(Level.SEVERE, "as2j: parsing error:" + e.getMessage());
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "as2j: error parsing \"" + asFile + "\"", e);
+        }
+        return false;*/
     }
 
     public void parseAS(InputStream asIn, String sourceId) throws ParseException, JasonException {
@@ -422,7 +527,7 @@ public class Agent implements Serializable, ToDOM {
     public void initDefaultFunctions() {
         if (functions == null)
             functions = new HashMap<>();
-        addFunction(Count.class, false); // the  Count function depends on the agent class (its BB)
+        addFunction(Count.class, false);
     }
 
     /** register an arithmetic function implemented in Java */
@@ -485,7 +590,7 @@ public class Agent implements Serializable, ToDOM {
     }
 
     /** add the initial beliefs in BB and produce the corresponding events */
-    public void addInitialBelsInBB() throws JasonException {
+    public void addInitialBelsInBB() throws RevisionFailedException {
         // Once beliefs are stored in a Stack in the BB, insert them in inverse order
         for (int i=initialBels.size()-1; i >=0; i--)
             addInitBel(initialBels.get(i));
@@ -503,7 +608,7 @@ public class Agent implements Serializable, ToDOM {
             }
     }
 
-    private void addInitBel(Literal b) throws JasonException {
+    private void addInitBel(Literal b) throws RevisionFailedException {
         // if l is not a rule and has free vars (like l(X)), convert it into a rule like "l(X) :- true."
         if (!b.isRule() && !b.isGround())
             b = new Rule(b,Literal.LTrue);
@@ -611,29 +716,9 @@ public class Agent implements Serializable, ToDOM {
         return events.poll();
     }
 
-    protected  List<Option> selectOptionBB(List<Option> options) {
-        // filter based on BB implications
-        List<Option> result = new ArrayList<>();
-        for (Option o: options) {
-            var intId = ASSyntax.createNumber(o.getEvt().getIntention() == null ? -1 : o.getEvt().getIntention().getId());
-            var ol = ASSyntax.createLiteral(DefaultBeliefBase.selectOptionPI.getFunctor(),
-                            o.getEvt().getTrigger(),
-                            intId,
-                            o.getPlan().capply(o.getUnifier()),
-                            o.getUnifier().getAsTerm());
-            if (ol.logicalConsequence(this, o.getUnifier()).hasNext()) {
-                result.add(o);
-            }
-        }
-        return result;
-    }
-
-    public Option selectOption(List<Option> options) throws NoOptionException {
+    public Option selectOption(List<Option> options) {
         if (options != null && !options.isEmpty()) {
-            if (bb.hasSelectOption()) {
-                options = selectOptionBB(options);
-            }
-            return options.removeFirst();
+            return options.remove(0);
         } else {
             return null;
         }
@@ -671,121 +756,6 @@ public class Agent implements Serializable, ToDOM {
         else
             return actions.poll();
     }
-
-    /**
-     * Gets relevant plans for a trigger event (teP), usually from a plan library.
-     * A relevant plan is represented by an Option (a plan and a unifier).
-     *
-     * if evt is not null, that event is used as the context where teP was produced.
-     * It can be used to get the proper plan library scope to retrieve plans.
-     *
-     */
-    public List<Option> relevantPlans(Trigger teP, Event event) throws JasonException {
-        Trigger te = teP.clone();
-        List<Option> rp = null;
-
-        // gets the proper plan library (root, inner scope, ...)
-        PlanLibrary plib = getPL();
-        if (event != null && event.isInternal() && !event.getIntention().isFinished()) {
-            Plan p = event.getIntention().peek().getPlan();
-            if (p.hasSubPlans()) {
-                plib = p.getSubPlans();
-            } else if (p.getScope() != null) {
-                plib = p.getScope();
-            }
-        }
-
-
-        while (plib != null) {
-            List<Plan> candidateRPs = plib.getCandidatePlans(te);
-            if (candidateRPs != null) {
-                for (Plan pl : candidateRPs) {
-
-                    Unifier relUn = null;
-                    if (event != null && event.isInternal()) {
-                        // use IM vars in the context for sub-plans (new in JasonER)
-                        for (IntendedMeans im: event.getIntention()) {
-                            if (im.getPlan().hasSubPlans() && im.getPlan().getSubPlans().get(pl.getLabel()) != null) {
-                                relUn = im.triggerUnif.clone();
-                                break;
-                            }
-                        }
-                    }
-
-                    relUn = pl.isRelevant(te, relUn);
-                    if (relUn != null) {
-                        if (rp == null) rp = new LinkedList<>();
-                        rp.add(new Option(pl, relUn, event));
-                    }
-                }
-            }
-            plib = plib.getFather();
-        }
-
-        /* (previous to JasonER)
-        List<Plan> candidateRPs = ag.pl.getCandidatePlans(te);
-        if (candidateRPs != null) {
-            for (Plan pl : candidateRPs) {
-                Unifier relUn = pl.isRelevant(te, null);
-                if (relUn != null) {
-                    if (rp == null) rp = new LinkedList<>();
-                    rp.add(new Option(pl, relUn));
-                }
-            }
-        }*/
-        return rp;
-    }
-
-    public List<Option> applicablePlans(List<Option> rp) throws JasonException {
-        getTS().getC().syncApPlanSense.lock();
-        try {
-            List<Option> ap = null;
-            if (rp != null) {
-                for (Option opt: rp) {
-                    LogicalFormula context = opt.getPlan().getContext();
-                    if (getLogger().isLoggable(Level.FINE))
-                        getLogger().log(Level.FINE, "option for "+getTS().getC().SE.getTrigger()+" is plan "+opt.getPlan().getLabel() + " " + opt.getPlan().getTrigger() + " : " + context + " -- with unification "+opt.getUnifier());
-
-                    if (context == null) { // context is true
-                        if (ap == null) ap = new LinkedList<>();
-                        ap.add(opt);
-                        if (getLogger().isLoggable(Level.FINE))
-                            getLogger().log(Level.FINE, "     "+opt.getPlan().getLabel() + " is applicable with unification "+opt.getUnifier());
-                    } else {
-                        boolean allUnifs = opt.getPlan().isAllUnifs() || bb.hasSelectOption();
-
-                        Iterator<Unifier> r = context.logicalConsequence(this, opt.getUnifier());
-                        boolean isApplicable = false;
-                        if (r != null) {
-                            while (r.hasNext()) {
-                                isApplicable = true;
-                                opt.setUnifier(r.next());
-
-                                if (ap == null) ap = new LinkedList<>();
-                                ap.add(opt);
-
-                                if (getLogger().isLoggable(Level.FINE))
-                                    getLogger().log(Level.FINE, "     "+opt.getPlan().getLabel() + " is applicable with unification "+opt.getUnifier());
-
-                                if (!allUnifs) break; // returns only the first unification
-                                if (r.hasNext()) {
-                                    // create a new option for the next loop step
-                                    opt = new Option(opt.getPlan(), null, opt.getEvt());
-                                }
-                            }
-                        }
-
-                        if (!isApplicable && getLogger().isLoggable(Level.FINE))
-                            getLogger().log(Level.FINE, "     "+opt.getPlan().getLabel() + " is not applicable");
-                    }
-                }
-            }
-            return ap;
-        } finally {
-            getTS().getC().syncApPlanSense.unlock();
-        }
-    }
-
 
     /** TS Initialisation (called by the AgArch) */
     public void setTS(TransitionSystem ts) {
@@ -860,13 +830,13 @@ public class Agent implements Serializable, ToDOM {
                 dels++;
                 perceptsInBB.remove(); // remove l as perception from BB
 
-                // new version (it is certain that l is in BB, only clone l when the event is relevant)
+                // new version (it is sure that l is in BB, only clone l when the event is relevant)
                 Trigger te = new Trigger(TEOperator.del, TEType.belief, l);
                 if (ts.getC().hasListener() || pl.hasCandidatePlan(te)) {
                     l = ASSyntax.createLiteral(l.getFunctor(), l.getTermsArray());
                     l.addAnnot(BeliefBase.TPercept);
                     te.setLiteral(l);
-                    ts.getC().addEvent(new Event(te));
+                    ts.getC().addEvent(new Event(te, Intention.EmptyInt));
                 }
             }
         }
@@ -893,7 +863,7 @@ public class Agent implements Serializable, ToDOM {
             }
             if (!wasPerceived) {
                 dels++;
-                // new version (it is certain that l is in BB, only clone l when the event is relevant)
+                // new version (it is sure that l is in BB, only clone l when the event is relevant)
                 perceptsInBB.remove(); // remove l as perception from BB
 
                 Trigger te = new Trigger(TEOperator.del, TEType.belief, l);
@@ -924,7 +894,7 @@ public class Agent implements Serializable, ToDOM {
                 lp.addAnnot(BeliefBase.TPercept);
                 if (getBB().add(lp)) {
                     adds++;
-                    ts.updateEvents(new Event(new Trigger(TEOperator.add, TEType.belief, lp)));
+                    ts.updateEvents(new Event(new Trigger(TEOperator.add, TEType.belief, lp), Intention.EmptyInt));
                 }
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Error adding percetion " + lw.getLiteral(), e);
@@ -937,6 +907,7 @@ public class Agent implements Serializable, ToDOM {
         //    qProfiling.newUpdateCycle(getTS().getUserAgArch().getCycleNumber(), adds+dels, System.nanoTime()-startTime);
         return adds + dels;
     }
+
 
 
     /*
@@ -974,8 +945,7 @@ public class Agent implements Serializable, ToDOM {
      * The unifier <i>un</i> is updated by the method.
      */
     public Literal findBel(Literal bel, Unifier un) {
-        bb.getLock().lock();
-        try {
+        synchronized (bb.getLock()) {
             Iterator<Literal> relB = bb.getCandidateBeliefs(bel, un);
             if (relB != null) {
                 while (relB.hasNext()) {
@@ -988,8 +958,6 @@ public class Agent implements Serializable, ToDOM {
                 }
             }
             return null;
-        } finally {
-            bb.getLock().unlock();
         }
     }
 
@@ -1020,15 +988,14 @@ public class Agent implements Serializable, ToDOM {
     public List<Literal>[] brf(Literal beliefToAdd, Literal beliefToDel,  Intention i, boolean addEnd) throws RevisionFailedException {
         // This class does not implement belief revision! It
         // is supposed that a subclass will do it.
-        // It simply adds/dels the belief.
+        // It simply add/del the belief.
 
-        int position = 0; // add in the begining
+        int position = 0; // add in the begin
         if (addEnd)
             position = 1;
 
         List<Literal>[] result = null;
-        bb.getLock().lock();
-        try {
+        synchronized (bb.getLock()) {
             try {
                 if (beliefToAdd != null) {
                     if (logger.isLoggable(Level.FINE)) logger.fine("Doing (add) brf for " + beliefToAdd);
@@ -1042,7 +1009,7 @@ public class Agent implements Serializable, ToDOM {
                 }
 
                 if (beliefToDel != null) {
-                    Unifier u;
+                    Unifier u = null;
                     try {
                         u = i.peek().unif; // get from current intention
                     } catch (Exception e) {
@@ -1082,8 +1049,6 @@ public class Agent implements Serializable, ToDOM {
             } catch (Exception e) {
                 logger.log(Level.WARNING, "Error at BRF.",e);
             }
-        } finally {
-            bb.getLock().unlock();
         }
         return result;
     }
@@ -1129,8 +1094,7 @@ public class Agent implements Serializable, ToDOM {
     public void abolish(Literal bel, Unifier un) throws RevisionFailedException {
         List<Literal> toDel = new ArrayList<>();
         if (un == null) un = new Unifier();
-        bb.getLock().lock();
-        try {
+        synchronized (bb.getLock()) {
             Iterator<Literal> il = getBB().getCandidateBeliefs(bel, un);
             if (il != null) {
                 while (il.hasNext()) {
@@ -1147,8 +1111,6 @@ public class Agent implements Serializable, ToDOM {
             for (Literal l: toDel) {
                 delBel(l);
             }
-        } finally {
-            bb.getLock().unlock();
         }
     }
 
@@ -1162,15 +1124,14 @@ public class Agent implements Serializable, ToDOM {
     }
 
     public boolean hasCustomSelectOption() {
-        return hasCustomSelOp || (bb != null && bb.hasSelectOption());
+        return hasCustomSelOp;
     }
 
     static DocumentBuilder builder = null;
 
 
-    private Lock agStateLock = new ReentrantLock();
     /** Gets the agent "mind" (beliefs, plans, and circumstance) as XML */
-    public Document getAgState() {
+    public synchronized Document getAgState() {
         if (builder == null) {
             try {
                 builder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
@@ -1182,16 +1143,11 @@ public class Agent implements Serializable, ToDOM {
         Document docDOM = builder.newDocument();
         docDOM.appendChild(docDOM.createProcessingInstruction("xml-stylesheet", "href='http://jason.sf.net/xml/agInspection.xsl' type='text/xsl' "));
 
-        agStateLock.lock();
-        try {
-            Element ag = getAsDOM(docDOM);
-            docDOM.appendChild(ag);
+        Element ag = getAsDOM(docDOM);
+        docDOM.appendChild(ag);
 
-            ag.appendChild(ts.getC().getAsDOM(docDOM));
-            return docDOM;
-        } finally {
-            agStateLock.unlock();
-        }
+        ag.appendChild(ts.getC().getAsDOM(docDOM));
+        return docDOM;
     }
 
     @Override
@@ -1201,7 +1157,7 @@ public class Agent implements Serializable, ToDOM {
 
     /** Gets the agent "mind" as XML */
     public Element getAsDOM(Document document) {
-        Element ag = document.createElement("agent");
+        Element ag = (Element) document.createElement("agent");
         ag.setAttribute("name", ts.getAgArch().getAgName());
         ag.setAttribute("cycle", ""+ts.getAgArch().getCycleNumber());
 
@@ -1211,11 +1167,11 @@ public class Agent implements Serializable, ToDOM {
         ag.appendChild(importedNodePL);
 
         // agent status
-        Element ess = document.createElement("status");
+        Element ess = (Element) document.createElement("status");
         ag.appendChild(ess);
         Map<String,Object> status = getTS().getAgArch().getStatus();
         for (String k: status.keySet()) {
-            Element es = document.createElement("entry");
+            Element es = (Element) document.createElement("entry");
             es.setAttribute("key", k);
             es.setAttribute("value", status.get(k).toString());
             ess.appendChild(es);
@@ -1234,7 +1190,7 @@ public class Agent implements Serializable, ToDOM {
             }
         }
         Document document = builder.newDocument();
-        Element ag = document.createElement("agent");
+        Element ag = (Element) document.createElement("agent");
         if (getASLSrc() != null && getASLSrc().length() > 0) {
             ag.setAttribute("source", getASLSrc());
         }
@@ -1245,51 +1201,4 @@ public class Agent implements Serializable, ToDOM {
         return document;
     }
 
-    /** parse and load the agent code, asSrc may be null
-     * @deprecated use initAg() and load(src)
-     */
-    @Deprecated
-    public void initAg(String asSrc) throws Exception {
-        initAg();
-        loadInitialAS(asSrc);
-    }
-
-    /* @deprecated use loadInitialASL */
-    @Deprecated
-    public void load(String asSrc) throws Exception {
-        loadInitialAS(asSrc);
-    }
-
-    /* @deprecated use loadASL */
-    @Deprecated
-    public void loadAgSrc(String asSrc) throws Exception {
-        loadAS(asSrc);
-    }
-    /** @deprecated Prefer the initAg method with only the source code of the agent as parameter.
-     *
-     *  A call of this method like
-     *     <pre>
-     *     TransitionSystem ts = ag.initAg(arch, bb, asSrc, stts)
-     *     </pre>
-     *  can be replaced by
-     *     <pre>
-     *     new TransitionSystem(ag, new Circumstance(), stts, arch);
-     *     ag.setBB(bb); // only if you use a custom BB
-     *     ag.initAg(asSrc);
-     *     TransitionSystem ts = ag.getTS();
-     *     </pre>
-     */
-    @Deprecated
-    public TransitionSystem initAg(AgArch arch, BeliefBase bb, String asSrc, Settings stts) throws JasonException {
-        try {
-            if (bb != null)
-                setBB(bb);
-            new TransitionSystem(this, null, stts, arch);
-            initAg(asSrc);
-            return ts;
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, "Error creating the agent class!", e);
-            throw new JasonException("Error creating the agent class! - " + e);
-        }
-    }
 }

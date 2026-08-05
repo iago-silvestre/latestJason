@@ -18,15 +18,6 @@ numbers &lt; atoms &lt; structures &lt; lists
 <li>+/- maximum (term).
 </ul>
 
- <p>Query version:<ul>
- <li>+ term (variable or structure): the variable or structure whose
- instances will be used as max candidate.<br/>
-
- <li>+ query (logical formula): the formula used to find values for the term
-
- <li>+/- result (term): the max value for the query.
-
- </ul>
 <p>Examples:<ul>
 
 <li> <code>.max([c,a,b],X)</code>: <code>X</code> unifies with
@@ -45,10 +36,7 @@ numbers &lt; atoms &lt; structures &lt; lists
 <li>
 <code>.max([],X)</code>: false.
 
- <li><code>.max(V, b(V), Max)</code>: unifies Max with the max V value for query b(V).
-
-
- </ul>
+</ul>
 
   @see jason.stdlib.concat
   @see jason.stdlib.delete
@@ -64,7 +52,40 @@ numbers &lt; atoms &lt; structures &lt; lists
   @see jason.stdlib.union
 
 */
-
+@Manual(
+        literal=".max(list,maximum)",
+        hint="gets the maximum value within a list of terms, using the \"natural\" order. "+
+             "For different types, the order is: numbers &lt; atoms &lt; structures &lt; lists",
+        argsHint= {
+                "the list where to find the maximum term",
+                "the resulting maximum"
+        },
+        argsType= {
+                "list",
+                "term"
+        },
+        examples= {
+                ".max([c,a,b],X): X unifies with c",
+                ".max([b,c,10,g,f(10),5,f(4)],X): X unifies with f(10)",
+                ".max([3,2,5],2]): false",
+                ".max([3,2,5],5): true",
+                ".max([],X): false"
+        },
+        seeAlso= {
+                "jason.stdlib.concat",
+                "jason.stdlib.delete",
+                "jason.stdlib.length",
+                "jason.stdlib.member",
+                "jason.stdlib.sort",
+                "jason.stdlib.nth",
+                "jason.stdlib.min",
+                "jason.stdlib.reverse",
+                "jason.stdlib.difference",
+                "jason.stdlib.intersection",
+                "jason.stdlib.union"
+        }
+    )
+@SuppressWarnings("serial")
 public class max extends min {
 
     private static InternalAction singleton = null;

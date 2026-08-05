@@ -277,7 +277,7 @@ public class ExecutionControlGUI extends ExecutionControl {
     @SuppressWarnings("unchecked")
     void setListOfAgsFromInfra() {
         try {
-            Set<String> ags = new TreeSet<String>(getExecutionControlInfraTier().getRuntimeServices().getAgentsName());
+            Set<String> ags = new TreeSet<String>(getExecutionControlInfraTier().getRuntimeServices().getAgentsNames());
             for (String ag: ags) { //getExecutionControlInfraTier().getRuntimeServices().getAgentsNames()) {
                 listModel.addElement(ag);
             }

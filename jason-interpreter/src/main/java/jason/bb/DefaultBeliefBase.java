@@ -1,28 +1,33 @@
 package jason.bb;
 
-import jason.JasonException;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+
 import jason.asSemantics.Agent;
 import jason.asSemantics.Unifier;
 import jason.asSyntax.Atom;
 import jason.asSyntax.Literal;
 import jason.asSyntax.PredicateIndicator;
-import jason.asSyntax.Term;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-
-import java.io.Serial;
-import java.io.Serializable;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingDeque;
-import java.util.logging.Logger;
 
 /**
  * Default implementation of Jason BB.
  */
 public class DefaultBeliefBase extends BeliefBase implements Serializable {
 
-    @Serial
     private static final long serialVersionUID = 4189725430351480996L;
 
     private static Logger logger = Logger.getLogger(DefaultBeliefBase.class.getSimpleName());
@@ -34,13 +39,8 @@ public class DefaultBeliefBase extends BeliefBase implements Serializable {
     private Map<PredicateIndicator, BelEntry> belsMapDefaultNS = new ConcurrentHashMap<>();
 
     private Map<Atom, Map<PredicateIndicator, BelEntry>> nameSpaces = new ConcurrentHashMap<>();
-    private Map<Atom, Map<Atom, Term>> nameSpaceProps = new HashMap<>();
 
     private int size = 0;
-
-    /** whether the BB has a rule select__option */
-    protected boolean hasSelectOption = false;
-    public static final PredicateIndicator selectOptionPI = new PredicateIndicator("select__option", 4);
 
     /** set of beliefs with percept annot, used to improve performance of buf */
     protected Set<Literal> percepts = new HashSet<>();
@@ -59,29 +59,6 @@ public class DefaultBeliefBase extends BeliefBase implements Serializable {
     @Override
     public Set<Atom> getNameSpaces() {
         return nameSpaces.keySet();
-    }
-
-    @Override
-    public void setNameSpaceProp(Atom ns, Atom key, Term value) {
-        nameSpaceProps
-                .computeIfAbsent(ns, k -> new HashMap<>())
-                .put(key,value);
-    }
-
-    @Override
-    public Term getNameSpaceProp(Atom ns, Atom key) {
-        if (nameSpaceProps.containsKey(ns))
-            return nameSpaceProps.get(ns).get(key);
-        else
-            return null;
-    }
-
-    @Override
-    public Set<Atom> getNameSpaceProps(Atom ns) {
-        if (nameSpaceProps.containsKey(ns))
-            return nameSpaceProps.get(ns).keySet();
-        else
-            return new HashSet<Atom>();
     }
 
     @Override
@@ -132,25 +109,19 @@ public class DefaultBeliefBase extends BeliefBase implements Serializable {
     }
 
     @Override
-    public boolean add(Literal l) throws JasonException {
+    public boolean add(Literal l) {
         return add(l, false);
     }
 
     @Override
-    public boolean add(int index, Literal l) throws JasonException {
+    public boolean add(int index, Literal l) {
         return add(l, index != 0);
     }
 
-    protected boolean add(Literal l, boolean addInEnd) throws JasonException {
+    protected boolean add(Literal l, boolean addInEnd) {
         if (!l.canBeAddedInBB()) {
-            throw new JasonException("Error: '"+l+"' can not be added in the belief base.");
-        }
-        if (l.getNS().isVar()) {
-            throw new JasonException("Error: '"+l+"' can no be placed in an unground namespace "+l.getNS()+".");
-        }
-
-        if (l.getPredicateIndicator().equals(selectOptionPI)) {
-            hasSelectOption = true;
+            logger.log(Level.SEVERE, "Error: '"+l+"' can not be added in the belief base.");
+            return false;
         }
 
         Literal bl = contains(l);
@@ -167,7 +138,7 @@ public class DefaultBeliefBase extends BeliefBase implements Serializable {
         } else {
             // new bel
 
-            l = l.copy(); // we need to clone l for the consequent event to not have a ref to this bel (which may change before the event is processed); see bug from Viviana Mascardi
+            l = l.copy(); // we need to clone l for the consequent event to not have a ref to this bel (which may change before the event is processed); see bug from Viviana Marcardi
             BelEntry entry = provideBelEntry(l);
             entry.add(l, addInEnd);
 
@@ -180,11 +151,6 @@ public class DefaultBeliefBase extends BeliefBase implements Serializable {
             return true;
         }
         return false;
-    }
-
-    @Override
-    public boolean hasSelectOption() {
-        return hasSelectOption;
     }
 
     private BelEntry provideBelEntry(Literal l) {
@@ -393,17 +359,8 @@ public class DefaultBeliefBase extends BeliefBase implements Serializable {
     @Override
     public BeliefBase clone() {
         DefaultBeliefBase bb = new DefaultBeliefBase();
-        getLock().lock();
-        try {
-            for (Literal b : this) {
-                try {
-                    bb.add(1, b.copy());
-                } catch (JasonException e) {
-                    e.printStackTrace();
-                }
-            }
-        } finally {
-            getLock().unlock();
+        for (Literal b: this) {
+            bb.add(1, b.copy());
         }
         return bb;
     }
@@ -413,8 +370,8 @@ public class DefaultBeliefBase extends BeliefBase implements Serializable {
         Element eDOMbels = (Element) document.createElement("beliefs");
         int tries = 0;
         while (tries < 10) { // max 10 tries
-            getLock().lock();
             try {
+                synchronized (getLock()) {
                     // declare namespaces
                     Element enss = (Element) document.createElement("namespaces");
                     Element ens = (Element) document.createElement("namespace");
@@ -446,6 +403,7 @@ public class DefaultBeliefBase extends BeliefBase implements Serializable {
                         }
                     }
 
+                }
                 /*Collections.sort(allBels);
                 for (Literal l: allBels)
                     eDOMbels.appendChild(l.getAsDOM(document));*/
@@ -454,8 +412,6 @@ public class DefaultBeliefBase extends BeliefBase implements Serializable {
                 tries++;
                 e.printStackTrace();
                 // simply tries again
-            } finally {
-                getLock().unlock();
             }
         }
         return eDOMbels;

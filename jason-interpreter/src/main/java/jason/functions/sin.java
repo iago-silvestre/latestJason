@@ -14,7 +14,6 @@ import jason.asSyntax.Term;
 */
 public class sin extends DefaultArithFunction  {
 
-    @Override
     public String getName() {
         return "math.sin";
     }

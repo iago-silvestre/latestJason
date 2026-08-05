@@ -8,7 +8,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
-import jason.JasonException;
 import jason.RevisionFailedException;
 import jason.asSemantics.Agent;
 import jason.asSemantics.Unifier;
@@ -30,7 +29,7 @@ public class RuleTest extends TestCase {
         super.setUp();
     }
 
-    public void testLogCons() throws JasonException {
+    public void testLogCons() {
         Agent ag = new Agent();
         ag.initAg();
 
@@ -90,7 +89,7 @@ public class RuleTest extends TestCase {
         assertEquals(r1,r2);
     }
 
-    public void testLogCons2() throws JasonException {
+    public void testLogCons2() {
         Agent ag = new Agent();
         ag.initAg();
 
@@ -114,7 +113,7 @@ public class RuleTest extends TestCase {
 
     }
 
-    public void testLogConsRec() throws JasonException {
+    public void testLogConsRec() {
         Agent ag = new Agent();
         ag.initAg();
 

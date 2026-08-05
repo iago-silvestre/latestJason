@@ -2,7 +2,6 @@ package jason.asSemantics;
 
 import jason.asSyntax.Term;
 
-import java.io.Serial;
 import java.io.Serializable;
 
 /**
@@ -14,7 +13,6 @@ import java.io.Serializable;
  */
 public abstract class DefaultArithFunction implements ArithFunction, Serializable {
 
-    @Serial
     private static final long serialVersionUID = 1L;
 
     public String getName() {

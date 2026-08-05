@@ -66,7 +66,7 @@ public abstract class BaseLocalMAS extends NotificationBroadcasterSupport {
      * @deprecated use RuntimeServicesFactory.set() instead.
      */
     @Deprecated
-    public void setRuntimeServices(RuntimeServices rts) {
+    public void setRuntimeServives(RuntimeServices rts) {
         RuntimeServicesFactory.set(rts);
     }
 

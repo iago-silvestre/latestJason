@@ -1,5 +1,6 @@
 package jason.environment;
 
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -34,10 +35,10 @@ public class Environment {
 
     private static Logger logger = Logger.getLogger(Environment.class.getName());
 
-    protected List<Literal> percepts = Collections.synchronizedList(new ArrayList<Literal>());
-    protected Map<String,List<Literal>>  agPercepts = new ConcurrentHashMap<String, List<Literal>>();
+    private List<Literal> percepts = Collections.synchronizedList(new ArrayList<Literal>());
+    private Map<String,List<Literal>>  agPercepts = new ConcurrentHashMap<String, List<Literal>>();
 
-    protected boolean isRunning = true;
+    private boolean isRunning = true;
 
     /** the infrastructure tier for environment (Local, Jade, ...) */
     private EnvironmentInfraTier environmentInfraTier = null;
@@ -47,8 +48,12 @@ public class Environment {
 
     protected ExecutorService executor; // the thread pool used to execute actions
 
+    protected Boolean[] cpArray = new Boolean[64]; //by LBB
+
     /** creates an environment class with n threads to execute actions required by the agents */
     public Environment(int n) {
+        Arrays.fill(cpArray, Boolean.FALSE); //by LBB
+
         // creates a thread pool with n threads
         executor = Executors.newFixedThreadPool(n);
 
@@ -156,6 +161,15 @@ public class Environment {
         return p;
     }
 
+    public Boolean[] getPerceptsCBS(String agName) {
+        return cpArray;
+    }
+
+    public void doResetCBS(String agName) {
+        resetCBS();
+        return;
+    }
+        
     /**
      *  Returns a copy of the perception for an agent.
      *
@@ -350,6 +364,21 @@ public class Environment {
         });
     }
 
+    /**
+     * LBB: Updates CBS on the environment. 
+     * This method should be overridden in the user environment class.
+     */
+    public boolean updateCBS() {
+        logger.info("updateCBS was not implemented in the default environment.");
+        return false;
+    }
+
+    /**
+     * LBB: Reset CBS on the environment. 
+     */
+    public void resetCBS() {
+        return;
+    }
     /**
      * Executes an action on the environment. This method is probably overridden in the user environment class.
      */

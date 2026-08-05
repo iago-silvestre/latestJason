@@ -2,20 +2,17 @@ package jason.infra.local;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
-import java.io.Serial;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -28,8 +25,15 @@ import jason.asSemantics.Circumstance;
 import jason.asSemantics.Intention;
 import jason.asSemantics.Message;
 import jason.asSemantics.TransitionSystem;
+import jason.asSemantics.Tuple;
 import jason.asSyntax.Atom;
 import jason.asSyntax.Literal;
+import jason.asSyntax.LiteralImpl;
+import jason.asSyntax.Plan;
+import jason.asSyntax.PlanBody;
+import jason.asSyntax.Trigger;
+import jason.asSyntax.Trigger.TEOperator;
+import jason.asSyntax.Trigger.TEType;
 import jason.mas2j.ClassParameters;
 import jason.runtime.RuntimeServices;
 import jason.runtime.RuntimeServicesFactory;
@@ -54,7 +58,6 @@ import jason.util.Config;
  */
 public class LocalAgArch extends AgArch implements Runnable, Serializable {
 
-    @Serial
     private static final long serialVersionUID = 4378889704809002271L;
 
     protected transient LocalEnvironment      infraEnv     = null;
@@ -67,6 +70,51 @@ public class LocalAgArch extends AgArch implements Runnable, Serializable {
     protected transient Logger logger  = Logger.getLogger(LocalAgArch.class.getName());
 
     private static List<MsgListener> msgListeners = null;
+
+    /** Mapping of cpX → functor name */
+    private final Map<Integer, String> cpBindings = new LinkedHashMap<>();
+
+    /** Last seen severity label for each cp */
+    private final Map<Integer, String> lastVals = new HashMap<>();
+
+    // RosMaster added for instant trigger of Critical Severity perceptions
+    //private MyRosMaster myRosMaster;
+
+    private static final Map<String, Integer> cpToPriority = new HashMap<>();
+    static {
+        Map.of(
+            5, List.of("cp4"),             //Catastrophic
+            4, List.of("cp1" ),                   //Hazardous
+            3, List.of("cp0"),                  //Major
+            2, List.of("cp2"),            //Minor
+            1, List.of("cp3")             //No Effect
+        ).forEach((prio, cps) -> cps.forEach(cp -> cpToPriority.put(cp, prio)));
+    }
+
+    private static final Map<Integer, String> priorityToMode = new HashMap<>();
+    static {
+        priorityToMode.put(5, "Bypass");
+        priorityToMode.put(4, "Expedited-RC");
+        priorityToMode.put(3, "Expedited-RC");
+        priorityToMode.put(2, "Standard-RC");
+        priorityToMode.put(1, "Standard-RC");
+    }
+
+    /** Mapping of cp functor -> reaction string (e.g., "cp1" -> "react_cp1") */
+    private static final Map<String, String> cpReactions = new HashMap<>();
+    static {
+        cpReactions.put("cp0", "cp0_Minor");    // !react_cp0
+        cpReactions.put("cp1", "cp1_Major");    // react_cp1 [cr]
+        cpReactions.put("cp2", "cp2_Catastrophic");  //  internalAction(cp2-Catastrophic)
+        cpReactions.put("cp3", "react_cp3");    
+        cpReactions.put("cp4", "failsafe_2");
+        cpReactions.put("cp5", "react_cp5");
+        cpReactions.put("cp6", "react_cp6");
+        cpReactions.put("cp7", "failsafe_2");
+        cpReactions.put("cp8", "react_cp8");
+        cpReactions.put("cp9", "cp9_catastrophic");
+    }
+
     public static void addMsgListener(MsgListener l) {
         if (msgListeners == null) {
             msgListeners = new ArrayList<>();
@@ -77,23 +125,37 @@ public class LocalAgArch extends AgArch implements Runnable, Serializable {
         msgListeners.remove(l);
     }
 
-    @Serial
     private void readObject(ObjectInputStream inputStream) throws IOException, ClassNotFoundException {
         inputStream.defaultReadObject();
-        sleepLock = new ReentrantLock();
-        inSleep = sleepLock.newCondition();
-        syncLock = new ReentrantLock();
-        inSyncMode = syncLock.newCondition();
+        sleepSync   = new Object();
+        syncMonitor = new Object();
         masRunner   = BaseLocalMAS.getRunner();
     }
 
+    public LocalAgArch() {
+        super();
 
+        // Bind cp0 directly to "cp0"
+        cpToPriority.entrySet().stream()
+        .sorted((a, b) -> Integer.compare(b.getValue(), a.getValue())) // Descending priority
+        .forEach(entry -> {
+            String cp = entry.getKey(); // e.g., "cp7"
+            try {
+                int cpIndex = Integer.parseInt(cp.replace("cp", ""));
+                cpBindings.put(cpIndex, cp);
+                lastVals.put(cpIndex, "None");
+            } catch (NumberFormatException e) {
+                System.err.println("Invalid CP key format: " + cp);
+            }
+        });
+
+        }
     /**
      * Creates the user agent architecture, default architecture is
-     * jason.architecture.AgArch. The arch will create the agent that then creates
+     * jason.architecture.AgArch. The arch will create the agent that creates
      * the TS.
      */
-    public void createArchs(List<String> agArchClasses, String agClass, ClassParameters bbPars, String asSrc, Settings stts) throws Exception {
+    public void createArchs(Collection<String> agArchClasses, String agClass, ClassParameters bbPars, String asSrc, Settings stts) throws Exception {
         try {
             Agent.create(this, agClass, bbPars, asSrc, stts);
             insertAgArch(this);
@@ -114,7 +176,7 @@ public class LocalAgArch extends AgArch implements Runnable, Serializable {
     }
 
     /** init the agent architecture based on another agent */
-    public void createArchs(List<String> agArchClasses, Agent ag) throws JasonException {
+    public void createArchs(Collection<String> agArchClasses, Agent ag) throws JasonException {
         try {
             setMASRunner(masRunner); // TODO: remove
             setTS(ag.clone(this).getTS());
@@ -223,6 +285,15 @@ public class LocalAgArch extends AgArch implements Runnable, Serializable {
         } while (running && ++i < cyclesSense && !ts.canSleepSense());
     }
 
+    protected void expeditedRP() {
+        TransitionSystem ts = getTS();
+
+        int i = 0;
+        do { 
+            ts.expeditedRP();
+        } while (running && ++i < cyclesSense && !ts.canSleepSense());
+    }
+
     //int sumDel = 0; int nbDel = 0;
     protected void deliberate() {
         TransitionSystem ts = getTS();
@@ -254,17 +325,59 @@ public class LocalAgArch extends AgArch implements Runnable, Serializable {
     }
 
     protected void reasoningCycle() {
-        getFirstAgArch().reasoningCycleStarting();
+    //     getFirstAgArch().reasoningCycleStarting();
 
+    //     sense();
+    //     deliberate();
+    //     act();
+
+    //     getFirstAgArch().reasoningCycleFinished();
+
+    //LBB attempt 1:
+    //long start = System.currentTimeMillis();
+
+        getFirstAgArch().reasoningCycleStarting();
+        long start = System.nanoTime();
+
+        //criticalRC();
+        // TransitionSystem ts = getTS(); 
+        // ts.expeditedRP();
+        getTS().expeditedRP();
+        long endSenLBB = System.nanoTime();
         sense();
+        long endSen = System.nanoTime();
         deliberate();
+        long endDel = System.nanoTime();
         act();
+        long endRC = System.nanoTime();
 
         getFirstAgArch().reasoningCycleFinished();
+        //long pass = System.currentTimeMillis() - start;
+  
     }
 
     public void run() {
         TransitionSystem ts = getTS();
+        /*cpToPriority.entrySet().stream()
+        .sorted((a, b) -> Integer.compare(b.getValue(), a.getValue())) // Descending priority
+        .forEach(entry -> {
+            String cp = entry.getKey(); // e.g., "cp7"
+            try {
+                int cpIndex = Integer.parseInt(cp.replace("cp", ""));
+                cpBindings.put(cpIndex, cp);
+                lastVals.put(cpIndex, "None");
+            } catch (NumberFormatException e) {
+                System.err.println("Invalid CP key format: " + cp);
+            }
+        });*/
+        /*try {
+            // Pause for 1 second (1000 milliseconds)
+            Thread.sleep(10); 
+        } catch (InterruptedException e) {
+            // It is best practice to restore the interrupt flag
+            Thread.currentThread().interrupt(); 
+            System.out.println("Thread was interrupted!");
+        }*/
         while (running) {
             if (ts.getSettings().isSync()) {
                 waitSyncSignal();
@@ -281,15 +394,13 @@ public class LocalAgArch extends AgArch implements Runnable, Serializable {
                 getFirstAgArch().incCycleNumber(); // should not increment in case of sync execution
                 reasoningCycle();
                 if (ts.canSleep())
-                    sleep();
+                    sleepCJ(); 
             }
         }
         logger.fine("I finished!");
     }
 
-    private transient Lock sleepLock = new ReentrantLock();
-    private transient Condition inSleep = sleepLock.newCondition();
-
+    private transient Object sleepSync = new Object();
     private int    sleepTime = 50;
 
     public static final int MAX_SLEEP = 1000;
@@ -298,13 +409,31 @@ public class LocalAgArch extends AgArch implements Runnable, Serializable {
         try {
             if (!getTS().getSettings().isSync()) {
                 //logger.fine("Entering in sleep mode....");
-                sleepLock.lock();
-                try {
-                    inSleep.await(sleepTime, TimeUnit.MILLISECONDS);
+                synchronized (sleepSync) {
+                    sleepSync.wait(sleepTime); // wait for messages
                     if (sleepTime < MAX_SLEEP)
                         sleepTime += 100;
-                } finally {
-                    sleepLock.unlock();
+                }
+            }
+        } catch (InterruptedException e) {
+        } catch (Exception e) {
+            logger.log(Level.WARNING,"Error in sleep.", e);
+        }
+    }
+
+    // LBB: modified to a fixed 100ms sleep
+    public void sleepCJ() {
+        int i=10;
+        try {
+            if (!getTS().getSettings().isSync()) {
+                while(i-- > 0){
+                    //logger.info("Entering in sleep mode....");
+                    synchronized (sleepSync) {
+                        sleepSync.wait(10); // wait for messages
+                    }
+                    if(perceiveCP() != null){
+                        break;
+                    }                         
                 }
             }
         } catch (InterruptedException e) {
@@ -315,12 +444,9 @@ public class LocalAgArch extends AgArch implements Runnable, Serializable {
 
     @Override
     public void wake() {
-        sleepLock.lock();
-        try {
+        synchronized (sleepSync) {
             sleepTime = 50;
-            inSleep.signalAll();
-        } finally {
-            sleepLock.unlock();
+            sleepSync.notifyAll(); // notify sleep method
         }
     }
 
@@ -345,8 +471,57 @@ public class LocalAgArch extends AgArch implements Runnable, Serializable {
         super.perceive();
         if (infraEnv == null) return null;
         Collection<Literal> percepts = infraEnv.getUserEnvironment().getPercepts(getAgName());
-        if (logger.isLoggable(Level.FINE) && percepts != null) logger.fine("percepts: " + percepts);
+        //if (logger.isLoggable(Level.FINE) && percepts != null) logger.fine("percepts: " + percepts);
         return percepts;
+    }
+
+    /* LBB implementartion for critical things
+     * If 'infraEnv' is NULL it means this function will not be used, and another implementation is provided in a different xxAgArch implementation (eg. DemoEmbeddedAgentArch)
+     */
+   @Override
+    public Boolean[] perceiveCP() { 
+        super.perceiveCP();
+        if (infraEnv == null) return null;
+        Boolean[] EnvPercepts = infraEnv.getUserEnvironment().getPerceptsCBS(getAgName());
+        Circumstance C = getTS().getC();
+        C.CPM.clear();
+        for (Map.Entry<Integer, String> binding : cpBindings.entrySet()) {
+            String functor = binding.getValue(); // e.g., "cp0"
+            int cpIndex = Integer.parseInt(functor.replace("cp", ""));
+            if (EnvPercepts[cpIndex] == Boolean.FALSE) continue;
+            int priority = getPriority(functor);
+            String reaction = cpReactions.getOrDefault(functor, "handle_" + functor);
+            String mode = priorityToMode.get(priority);
+            int k = 0;
+            try {
+                switch (mode) {
+                    case "Bypass":
+                        ActionExec action = null;
+                        action = new ActionExec(new LiteralImpl("critReac0"), null); //LBB: FIX for proper function, e.g. ag.selectActionLB()
+                        act(action);
+                        infraEnv.getUserEnvironment().resetCBS();
+                        break;
+
+                    case "Expedited-RC":
+                        Literal percept = new LiteralImpl("cb"+cpIndex); 
+                        Trigger te = new Trigger(TEOperator.add, TEType.belief, percept);
+                        C.CPM.put(te.getPredicateIndicator(), true);
+                        break;
+
+                    default: // Standard-RC
+                        Literal lit = Literal.parseLiteral("cr0Per(" + k + ")");
+                        infraEnv.getUserEnvironment().addPercept(lit);
+                        k=k+1;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        return EnvPercepts;
+    }
+
+    private int getPriority(String functor) {
+        return cpToPriority.getOrDefault(functor, 3);
     }
 
     // this is used by the .send internal action in stdlib
@@ -376,7 +551,7 @@ public class LocalAgArch extends AgArch implements Runnable, Serializable {
     }
 
     public void broadcast(Message m) throws Exception {
-        for (String agName: RuntimeServicesFactory.get().getAgentsName()) {
+        for (String agName: RuntimeServicesFactory.get().getAgentsNames()) {
             if (!agName.equals(this.getAgName())) {
                 Message newm = m.clone();
                 newm.setReceiver(agName);
@@ -420,9 +595,7 @@ public class LocalAgArch extends AgArch implements Runnable, Serializable {
         return mbox.isEmpty() && isRunning();
     }
 
-
-    private transient Lock syncLock = new ReentrantLock();
-    private transient Condition inSyncMode = syncLock.newCondition();
+    private transient Object  syncMonitor = new Object();
     private volatile boolean inWaitSyncMonitor = false;
 
     /**
@@ -430,16 +603,15 @@ public class LocalAgArch extends AgArch implements Runnable, Serializable {
      * execution mode)
      */
     private void waitSyncSignal() {
-        syncLock.lock();
         try {
+            synchronized (syncMonitor) {
                 inWaitSyncMonitor = true;
-                inSyncMode.await();
+                syncMonitor.wait();
                 inWaitSyncMonitor = false;
+            }
         } catch (InterruptedException e) {
         } catch (Exception e) {
             logger.log(Level.WARNING,"Error waiting sync (1)", e);
-        } finally {
-            syncLock.unlock();
         }
     }
 
@@ -448,18 +620,17 @@ public class LocalAgArch extends AgArch implements Runnable, Serializable {
      * waiting a signal
      */
     public void receiveSyncSignal() {
-        syncLock.lock();
         try {
-            while (!inWaitSyncMonitor && isRunning()) {
-                // waits the agent to enter in waitSyncSignal
-                inSyncMode.await(50, TimeUnit.MILLISECONDS);
+            synchronized (syncMonitor) {
+                while (!inWaitSyncMonitor && isRunning()) {
+                    // waits the agent to enter in waitSyncSignal
+                    syncMonitor.wait(50);
+                }
+                syncMonitor.notifyAll();
             }
-            inSyncMode.signalAll();
         } catch (InterruptedException e) {
         } catch (Exception e) {
             logger.log(Level.WARNING,"Error waiting sync (2)", e);
-        } finally {
-            syncLock.unlock();
         }
     }
 
@@ -533,20 +704,10 @@ public class LocalAgArch extends AgArch implements Runnable, Serializable {
         status.put("cycle", getCycleNumber());
         status.put("idle", getTS().canSleep());
 
+        // put intentions
         Circumstance c = getTS().getC();
 
-        status.put("nbBeliefs", getTS().getAg().getBB().size());
-        status.put("nbMails", getMBox().size());
-        status.put("nbEvents", c.getEvents().size());
-
-        // put intentions
-
-        var ri = c.getNbRunningIntentions();
-        if (c.getSelectedIntention()!=null && c.getPendingIntentions().values().contains(c.getSelectedIntention())) // case of selected intention just being pending
-            ri--;
-        status.put("nbIntentions", ri + c.getPendingIntentions().size());
-        status.put("nbRunningIntentions", ri);
-        status.put("nbPendingIntentions", c.getPendingIntentions().size());
+        status.put("nbIntentions", c.getNbRunningIntentions() + c.getPendingIntentions().size());
 
         List<Map<String, Object>> ints = new ArrayList<>();
         Iterator<Intention> ii = c.getAllIntentions();
@@ -558,12 +719,7 @@ public class LocalAgArch extends AgArch implements Runnable, Serializable {
             //iprops.put("suspended", i.isSuspended());
             iprops.put("state", i.getStateBasedOnPlace());
             if (i.isSuspended()) {
-                iprops.put("suspended_reason", i.getSuspendedReason().toString());
-            }
-            // the case of SI in Pending
-            if (c.getSelectedIntention() ==  i && c.getPendingIntentions().values().contains(i)) {
-                iprops.put("state", Intention.State.waiting);
-                iprops.put("waiting_for", c.getPendingIntentionKey(i));
+                iprops.put("suspendedReason", i.getSuspendedReason().toString());
             }
             iprops.put("size", i.size());
             ints.add(iprops);

@@ -17,6 +17,8 @@ import jade.domain.FIPAAgentManagement.ServiceDescription;
 import jade.wrapper.AgentController;
 import jade.wrapper.ContainerController;
 import jade.wrapper.ControllerException;
+import jason.JasonException;
+import jason.architecture.AgArch;
 import jason.mas2j.AgentParameters;
 import jason.mas2j.ClassParameters;
 import jason.runtime.RuntimeServices;
@@ -45,8 +47,7 @@ public class JadeRuntimeServices implements RuntimeServices {
         return cc != null;
     }
 
-    @Override
-    public String createAgent(String agName, String agSource, String agClass, List<String> archClasses, ClassParameters bbPars, Settings stts, jason.asSemantics.Agent father) throws Exception {
+    public String createAgent(String agName, String agSource, String agClass, Collection<String> archClasses, ClassParameters bbPars, Settings stts, jason.asSemantics.Agent father) throws Exception {
         try {
             if (logger.isLoggable(Level.FINE)) {
                 logger.fine("Creating jade agent " + agName + "from source " + agSource + "(agClass=" + agClass + ", archClass=" + archClasses + ", settings=" + stts);
@@ -73,7 +74,11 @@ public class JadeRuntimeServices implements RuntimeServices {
         // nothing to do, the jade create new agent is enough
     }
 
-    public Collection<String> getAgentsName() {
+    public AgArch clone(jason.asSemantics.Agent source, Collection<String> archClasses, String agName) throws JasonException {
+        throw new JasonException("clone for JADE is not implemented!");
+    }
+
+    public Collection<String> getAgentsNames() {
         // TODO: make a cache list and update it when a new agent enters the system
         if (jadeAgent == null) return null;
         try {
@@ -112,7 +117,7 @@ public class JadeRuntimeServices implements RuntimeServices {
 
     public int getAgentsQty() {
         try {
-            return getAgentsName().size();
+            return getAgentsNames().size();
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error getting agents qty", e);
             return 0;

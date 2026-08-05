@@ -6,6 +6,9 @@
 
 { include("tester_agent.asl") }
 
+/**
+ * Tests based on from http://jason.sourceforge.net/api/jason/stdlib/send.html
+ */
 @[test]
 +!test_send
     <-

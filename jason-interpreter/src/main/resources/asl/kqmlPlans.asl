@@ -9,7 +9,7 @@
 
 /* ---- tell performatives ---- */
 
-@kqmlReceivedTellStructure[atomic]
+@kqmlReceivedTellStructure
 +!kqml_received(Sender, tell, NS::Content, _)
    :  .literal(Content) &
       .ground(Content) &
@@ -36,10 +36,10 @@
 +!add_all_kqml_received(Sender,[_|T])
    <- !add_all_kqml_received(Sender,T).
 
-@kqmlReceivedUnTell[atomic]
+@kqmlReceivedUnTell
 +!kqml_received(Sender, untell, NS::Content, _)
-    : .add_nested_source(Content, Sender, CA)
-   <- --NS::CA.
+   <- .add_nested_source(Content, Sender, CA);
+      --NS::CA.
 
 
 /* ---- achieve performatives ---- */
@@ -73,8 +73,8 @@
 
 @kqmlReceivedAskOne1d
 +!kqml_received(Sender, askOne, NS::Content, MsgId)
-    : kqml::bel_no_source_self(NS, Content, Ans)
-   <- .send(Sender, tell, NS::Ans, MsgId).
+    : kqml::bel_no_source_self(NS::Content, Ans)
+   <- .send(Sender, tell, Ans, MsgId).
 
 //@kqmlReceivedAskOne1a // (self belief, do not send back the source)
 //+!kqml_received(Sender, askOne, NS::Content, MsgId)
@@ -100,18 +100,18 @@
 
 @kqmlReceivedAskAll2
 +!kqml_received(Sender, askAll, NS::Content, MsgId)
-   <- .findall(NS::Ans, kqml::bel_no_source_self(NS, Content, Ans), List);
+   <- .findall(Ans, kqml::bel_no_source_self(NS::Content, Ans), List);
       .send(Sender, tell, List, MsgId).
 
 kqml::clear_source_self([],[])[hide_in_mind_inspector].
 kqml::clear_source_self([source(self)|T],NT)[hide_in_mind_inspector]     :- kqml::clear_source_self(T,NT).
 kqml::clear_source_self([A|T],           [A|NT])[hide_in_mind_inspector] :- A \== source(self) & kqml::clear_source_self(T,NT).
 
-kqml::bel_no_source_self(NS, Content, Ans)[hide_in_mind_inspector] :-
+kqml::bel_no_source_self(NS::Content, Ans)[hide_in_mind_inspector] :-
    NS::Content[|LA] &
    kqml::clear_source_self(LA, NLA) &
    Content =.. [F,T,_] &
-   NS::Ans =.. [NS,F,T,NLA].
+   Ans     =.. [NS,F,T,NLA].
 
 /* ---- know-how performatives ---- */
 
@@ -129,21 +129,21 @@ kqml::bel_no_source_self(NS, Content, Ans)[hide_in_mind_inspector] :-
 +!kqml_received(Sender, untellHow, Content, _)
    <- .remove_plan(Content, Sender).
 
-// In askHow, content must be a string or plan term representing
+// In askHow, content must be a string representing
 // the triggering event
 @kqmlReceivedAskHow
 +!kqml_received(Sender, askHow, Content, MsgId)
    <- .relevant_plans(Content, ListOfPlans);
-      .remove_source_annot(ListOfPlans, ListOfPlansAn); // remove "source(self)" 
+      .remove_source_annot(ListOfPlans, ListOfPlansAn);
       .send(Sender, tellHow, ListOfPlansAn, MsgId).
 
 
-/* ---- signal performative ---- */
+/* ---- signal performatives ---- */
 
 @kqmlReceivedSignal
 +!kqml_received(Sender, signal, NS::Content, _)
     : not .list(Content) & .add_nested_source(Content, Sender, CA)
-   <- .signal( { +NS::CA }, type_signal ).
+   <- .signal( { +NS::CA }).
 
 /* general communication error handler */
 

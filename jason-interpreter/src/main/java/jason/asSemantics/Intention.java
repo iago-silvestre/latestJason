@@ -15,7 +15,7 @@ import jason.asSyntax.Atom;
 import jason.asSyntax.ListTerm;
 import jason.asSyntax.ListTermImpl;
 import jason.asSyntax.NumberTermImpl;
-import jason.pl.PlanLibrary;
+import jason.asSyntax.PlanLibrary;
 import jason.asSyntax.Structure;
 import jason.asSyntax.Term;
 import jason.asSyntax.Trigger;
@@ -240,10 +240,8 @@ public class Intention implements Serializable, Comparable<Intention>, Iterable<
             }
             tevent = im.getTrigger();
         }
-
         Trigger failTrigger = new Trigger(TEOperator.del, tevent.getType(), tevent.getLiteral());
-        pl.getLock().lock();
-        try {
+        synchronized (pl.getLock()) {
             while (!pl.hasCandidatePlan(failTrigger) && ii.hasNext()) {
                 // TODO: pop IM until +!g or *!g (this TODO is valid only if meta events are pushed on top of the intention)
                 // If *!g is found first, no failure event
@@ -253,14 +251,11 @@ public class Intention implements Serializable, Comparable<Intention>, Iterable<
                 failTrigger = new Trigger(TEOperator.del, tevent.getType(), tevent.getLiteral());
                 posInStak--;
             }
-            if (tevent.isGoal() && pl.hasCandidatePlan(failTrigger))
+            if (tevent.isGoal() && //tevent.isAddition() &&
+                    pl.hasCandidatePlan(failTrigger))
                 return new Pair<>(new Event(failTrigger.clone(), this), posInStak);
-            else if (!pl.isRoot())
-                return findEventForFailure(tevent, pl.getFather(), c);
             else
                 return new Pair<>(null, 0);
-        } finally {
-            pl.getLock().unlock();
         }
     }
 
@@ -278,7 +273,7 @@ public class Intention implements Serializable, Comparable<Intention>, Iterable<
     public boolean equals(Object o) {
         if (o == null) return false;
         if (o == this) return true;
-        if (o instanceof Intention i) return i.id == this.id;
+        if (o instanceof Intention) return ((Intention)o).id == this.id;
         return false;
     }
 

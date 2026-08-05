@@ -4,7 +4,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
-import jason.JasonException;
 import jason.asSemantics.Agent;
 import jason.asSemantics.Unifier;
 import jason.asSyntax.Literal;
@@ -48,7 +47,7 @@ public class IndexedBB extends ChainBBAdapter {
     // TODO: access indexes
 
     @Override
-    public boolean add(Literal bel) throws JasonException {
+    public boolean add(Literal bel) {
         Structure kb = indexedBels.get(bel.getFunctor());
         if (kb != null && kb.getArity() == bel.getArity()) { // is a constrained bel?
 

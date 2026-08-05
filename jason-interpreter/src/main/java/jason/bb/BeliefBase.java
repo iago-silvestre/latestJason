@@ -2,13 +2,9 @@ package jason.bb;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
-import jason.JasonException;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
@@ -56,21 +52,17 @@ public abstract class BeliefBase implements Iterable<Literal>, Cloneable, ToDOM 
         return null;
     }
 
-    public void setNameSpaceProp(Atom ns, Atom key, Term value) {}
-    public Term getNameSpaceProp(Atom ns, Atom key) { return null; }
-    public Set<Atom> getNameSpaceProps(Atom ns) { return new HashSet<>(); }
-
     /** Adds a belief in the end of the BB, returns true if succeed.
      *  The annots of l may be changed to reflect what was changed in the BB,
      *  for example, if l is p[a,b] in a BB with p[a], l will be changed to
      *  p[b] to produce the event +p[b], since only the annotation b is changed
      *  in the BB. */
-    public boolean add(Literal l) throws JasonException {
+    public boolean add(Literal l) {
         return false;
     }
 
     /** Adds a belief in the BB at <i>index</i> position, returns true if succeed */
-    public boolean add(int index, Literal l) throws JasonException {
+    public boolean add(int index, Literal l) {
         return false;
     }
 
@@ -140,18 +132,17 @@ public abstract class BeliefBase implements Iterable<Literal>, Cloneable, ToDOM 
 
     public abstract BeliefBase clone();
 
-    transient Lock lock = new ReentrantLock();
+    transient Object lock = new Object();
 
     /** Gets a lock for the BB */
-    public Lock getLock() {
+    public Object getLock() {
         return lock;
     }
 
     private void readObject(ObjectInputStream inputStream) throws IOException, ClassNotFoundException {
         inputStream.defaultReadObject();
-        lock = new ReentrantLock();
+        lock = new Object();
     }
 
-    public boolean hasSelectOption() { return false; }
 
 }

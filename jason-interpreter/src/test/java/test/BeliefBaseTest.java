@@ -1,19 +1,31 @@
 package test;
 
-import jason.JasonException;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
 import jason.RevisionFailedException;
 import jason.asSemantics.Agent;
 import jason.asSemantics.Intention;
 import jason.asSemantics.Unifier;
-import jason.asSyntax.*;
+import jason.asSyntax.ASSyntax;
+import jason.asSyntax.Atom;
+import jason.asSyntax.ListTermImpl;
+import jason.asSyntax.Literal;
+import jason.asSyntax.LiteralImpl;
+import jason.asSyntax.LogExpr;
+import jason.asSyntax.LogicalFormula;
+import jason.asSyntax.Pred;
+import jason.asSyntax.PredicateIndicator;
+import jason.asSyntax.Rule;
+import jason.asSyntax.Structure;
+import jason.asSyntax.Term;
+import jason.asSyntax.VarTerm;
 import jason.asSyntax.parser.ParseException;
 import jason.bb.BeliefBase;
 import jason.bb.DefaultBeliefBase;
+import jason.bb.JDBCPersistentBB;
 import junit.framework.TestCase;
-
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
 
 /** JUnit test case for syntax package */
 public class BeliefBaseTest extends TestCase {
@@ -22,7 +34,7 @@ public class BeliefBaseTest extends TestCase {
         super.setUp();
     }
 
-    public void testAdd() throws JasonException {
+    public void testAdd() {
         Literal l1, l2, l3, l4, l5;
         BeliefBase bb = new DefaultBeliefBase();
 
@@ -184,7 +196,7 @@ public class BeliefBaseTest extends TestCase {
         assertEquals(iteratorSize(bb.iterator()), 0);
     }
 
-    public void testAdd2() throws ParseException, JasonException {
+    public void testAdd2() throws ParseException {
         BeliefBase bb = new DefaultBeliefBase();
         Literal l1 = Literal.parseLiteral("pos[source(ag1)]");
         assertTrue(bb.add(l1));
@@ -232,7 +244,7 @@ public class BeliefBaseTest extends TestCase {
     }
 
 
-    public void testRemWithList() throws JasonException {
+    public void testRemWithList() {
         Unifier u = new Unifier();
         BeliefBase bb = new DefaultBeliefBase();
         Literal s = Literal.parseLiteral("seen(L)");
@@ -249,7 +261,7 @@ public class BeliefBaseTest extends TestCase {
         assertTrue(bb.remove(b1));
     }
 
-    public void testRemWithUnnamedVar() throws JasonException {
+    public void testRemWithUnnamedVar() {
         Agent ag = new Agent();
         ag.initAg();
 
@@ -284,7 +296,7 @@ public class BeliefBaseTest extends TestCase {
     }
 
     @SuppressWarnings("unused")
-    public void testLogCons() throws JasonException {
+    public void testLogCons() {
         Agent ag = new Agent();
         ag.initAg();
 
@@ -376,7 +388,7 @@ public class BeliefBaseTest extends TestCase {
     }
 
 
-    public void testLogConsWithAnnotsBacktracking() throws JasonException {
+    public void testLogConsWithAnnotsBacktracking() {
         Agent ag = new Agent();
         ag.initAg();
 
@@ -395,7 +407,7 @@ public class BeliefBaseTest extends TestCase {
     }
 
 
-    public void testPercept1() throws JasonException {
+    public void testPercept1() {
         BeliefBase bb = new DefaultBeliefBase();
         assertTrue(bb.add(Literal.parseLiteral("a[source(percept)]")));
         assertTrue(bb.add(Literal.parseLiteral("a[ag1]")));
@@ -417,7 +429,7 @@ public class BeliefBaseTest extends TestCase {
         assertEquals(iteratorSize(bb.getPercepts()),0);
     }
 
-    public void testPercept2() throws JasonException {
+    public void testPercept2() {
         BeliefBase bb = new DefaultBeliefBase();
         assertTrue(bb.add(Literal.parseLiteral("p1[source(percept),source(ag1)]")));
         assertTrue(bb.add(Literal.parseLiteral("p2[source(percept),a1]")));
@@ -443,7 +455,6 @@ public class BeliefBaseTest extends TestCase {
     }
 
 
-    /* it  adds too much constrains in build.gradle. test running the application
     public void testJDBCBB() {
         BeliefBase bb = new JDBCPersistentBB();
         bb.init(null, new String[] {
@@ -553,10 +564,10 @@ public class BeliefBaseTest extends TestCase {
         assertEquals(iteratorSize(bb.getCandidateBeliefs(Literal.parseLiteral("book_author(_,_)"),null)),5);
 
         bb.stop();
-    }*/
+    }
 
 
-    public void testBelBRF() throws JasonException {
+    public void testBelBRF() throws RevisionFailedException {
         Agent ag = new Agent();
         ag.initAg();
 
@@ -626,7 +637,7 @@ public class BeliefBaseTest extends TestCase {
         assertEquals(ag.getBB().size(),1);
     }
 
-    public void testClone() throws JasonException {
+    public void testClone() {
         Agent ag = new Agent();
         ag.initAg();
         ag.getBB().add(1,Literal.parseLiteral("a(10)"));
@@ -639,7 +650,7 @@ public class BeliefBaseTest extends TestCase {
         assertEquals(ag.getBB().size(), c.size());
     }
 
-    public void testBUF() throws JasonException {
+    public void testBUF() {
         Agent ag = new Agent();
         ag.initAg();
 
@@ -672,7 +683,7 @@ public class BeliefBaseTest extends TestCase {
         return c;
     }
 
-    public void testQueryCache() throws ParseException, JasonException {
+    public void testQueryCache() throws ParseException {
         Agent ag = new Agent();
         ag.initAg();
         ag.getTS().getSettings().setQueryCache(true);
@@ -779,7 +790,7 @@ public class BeliefBaseTest extends TestCase {
         //System.out.println(ag.getQueryCache());
     }
 
-    public void testQueryCacheBW() throws ParseException, JasonException {
+    public void testQueryCacheBW() throws ParseException {
         Agent ag = new Agent();
         ag.initAg();
         addBWBB(ag);
@@ -834,7 +845,7 @@ public class BeliefBaseTest extends TestCase {
         assertTrue(ASSyntax.parseLiteral("p(A,B)").subsumes(ASSyntax.parseLiteral("p(X,Y)")));
     }
 
-    void addBWBB(Agent ag) throws ParseException, JasonException {
+    void addBWBB(Agent ag) throws ParseException {
         ag.getBB().add(1,Literal.parseLiteral("clear(table)"));
         ag.getBB().add(1,Literal.parseLiteral("on(f,g)"));
         ag.getBB().add(1,Literal.parseLiteral("on(g,table)"));
@@ -849,7 +860,7 @@ public class BeliefBaseTest extends TestCase {
         ag.getBB().add(1,ASSyntax.parseRule("tower([X,Y|T]) :- on(X,Y) & tower([Y|T])."));
     }
 
-    public void testQueryCacheRR() throws ParseException, JasonException {
+    public void testQueryCacheRR() throws ParseException {
         Agent ag = new Agent();
         ag.initAg();
         ag.getTS().getSettings().setQueryCache(true);

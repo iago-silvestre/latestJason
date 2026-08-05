@@ -99,7 +99,7 @@ public class AgentParameters implements Serializable {
 
 
     public void setAgClass(String c) {
-        if (c != null && !c.isEmpty())
+        if (c != null)
             agClass = new ClassParameters(c);
     }
 
@@ -132,7 +132,7 @@ public class AgentParameters implements Serializable {
     }
 
     /** gets a list of all custom arch classes defined in the jason project */
-    public List<String> getAgArchClasses() {
+    public Collection<String> getAgArchClasses() {
         List<String> all = new ArrayList<>();
         for (ClassParameters c: archClasses) {
             all.add(c.getClassName());

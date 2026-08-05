@@ -8,7 +8,7 @@ import jason.JasonException;
 import jason.asSemantics.Event;
 import jason.asSyntax.ASSyntax;
 import jason.asSyntax.Plan;
-import jason.pl.PlanLibrary;
+import jason.asSyntax.PlanLibrary;
 import jason.asSyntax.parser.ParseException;
 import junit.framework.TestCase;
 
@@ -75,7 +75,7 @@ public class PlanERTest extends TestCase {
         if (!p.hasSubPlans())
             p = cand.get(1);
 
-        e = new Event(ASSyntax.parseTrigger("+e"));
+        e = new Event(ASSyntax.parseTrigger("+e"), null);
         cand = p.getSubPlans().getCandidatePlans(e.getTrigger());
         assertEquals(1, cand.size());
     }

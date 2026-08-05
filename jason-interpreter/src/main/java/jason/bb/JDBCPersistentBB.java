@@ -20,7 +20,6 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import jason.JasonException;
 import jason.asSemantics.Agent;
 import jason.asSemantics.Unifier;
 import jason.asSyntax.ASSyntax;
@@ -235,12 +234,12 @@ public class JDBCPersistentBB extends ChainBBAdapter {
     }
 
     @Override
-    public boolean add(Literal l) throws JasonException {
+    public boolean add(Literal l) {
         return add(0, l);
     }
 
     @Override
-    public boolean add(int index, Literal l) throws JasonException {
+    public boolean add(int index, Literal l) {
         if (!isDB(l))
             return nextBB.add(l);
         if (index != 0)

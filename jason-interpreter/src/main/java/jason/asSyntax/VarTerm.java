@@ -162,7 +162,8 @@ public class VarTerm extends LiteralImpl implements NumberTerm, ListTerm { //, S
         if (t == null) return false;
         if (t == this) return true;
         // is t also a var? (its value must also be null)
-        if (t instanceof final VarTerm tAsVT) {
+        if (t instanceof VarTerm) {
+            final VarTerm tAsVT = (VarTerm) t;
             return //negated() == tAsVT.negated() &&
                 getFunctor().equals(tAsVT.getFunctor()); // && getNS().equals(tAsVT.getNS());
         }
@@ -171,9 +172,10 @@ public class VarTerm extends LiteralImpl implements NumberTerm, ListTerm { //, S
 
     @Override
     protected int calcHashCode() {
+        int result = getFunctor().hashCode();
         //if (negated()) result += 3271; // TODO: review
         // Do not consider NS and negated! (in unifier, A = ~A)
-        return getFunctor().hashCode();
+        return result;
     }
 
 
@@ -333,7 +335,7 @@ public class VarTerm extends LiteralImpl implements NumberTerm, ListTerm { //, S
 
     @Override
     public void countVars(Map<VarTerm, Integer> c) {
-        int n = c.getOrDefault(this, 0);
+        int n = c.containsKey(this) ? c.get(this) : 0;
         c.put(this, n+1);
         super.countVars(c);
     }
@@ -369,7 +371,7 @@ public class VarTerm extends LiteralImpl implements NumberTerm, ListTerm { //, S
         return false;
     }
 
-    public boolean addAll(int index, Collection c) {
+    public boolean addAll(int index, @SuppressWarnings("rawtypes") Collection c) {
         return false;
     }
 

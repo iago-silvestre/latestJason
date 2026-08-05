@@ -59,7 +59,10 @@ import jason.asSyntax.parser.as2jConstants;
   Literal l4 = parseLiteral("~p(a,3)[s]");
   </pre>
 
+  @hidden
+
   @author Jomi
+
  */
 public class ASSyntax {
 

@@ -6,9 +6,8 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
-import java.io.Serial;
 
-import javax.swing.*;
+import javax.swing.JFrame;
 
 /**
  * View component for a GirdWorldModel.
@@ -17,7 +16,6 @@ import javax.swing.*;
  */
 public class GridWorldView extends JFrame {
 
-    @Serial
     private static final long serialVersionUID = 1L;
 
     protected int cellSizeW = 0;
@@ -45,12 +43,6 @@ public class GridWorldView extends JFrame {
 
     @Override
     public void repaint() {
-        if (!SwingUtilities.isEventDispatchThread()) {
-            // Only the event dispatch thread can update the GUI
-            SwingUtilities.invokeLater(this::repaint);
-            return;
-        }
-
         cellSizeW = drawArea.getWidth() / model.getWidth();
         cellSizeH = drawArea.getHeight() / model.getHeight();
         super.repaint();
@@ -65,15 +57,7 @@ public class GridWorldView extends JFrame {
     /** updates only one position of the grid */
     public void update(int x, int y) {
         Graphics g = drawArea.getGraphics();
-        if (g == null)
-            return;
-
-        if (!SwingUtilities.isEventDispatchThread()) {
-            // Only the event dispatch thread can update the GUI
-            SwingUtilities.invokeLater(() -> update(x,y));
-            return;
-        }
-
+        if (g == null) return;
         drawEmpty(g, x, y);
         draw(g, x, y);
     }
@@ -104,7 +88,7 @@ public class GridWorldView extends JFrame {
 
     public void drawEmpty(Graphics g, int x, int y) {
         g.setColor(Color.white);
-        g.fillRect(x * cellSizeW + 1, y * cellSizeH+1, cellSizeW-2, cellSizeH-2);
+        g.fillRect(x * cellSizeW + 1, y * cellSizeH+1, cellSizeW-1, cellSizeH-1);
         g.setColor(Color.lightGray);
         g.drawRect(x * cellSizeW, y * cellSizeH, cellSizeW, cellSizeH);
     }
@@ -116,14 +100,14 @@ public class GridWorldView extends JFrame {
         //drawString(g,x,y,defaultFont,String.valueOf(object));
     }
 
-    private static final int limit = (int)Math.pow(2,14);
+    private static int limit = (int)Math.pow(2,14);
 
     private void draw(Graphics g, int x, int y) {
         if ((model.data[x][y] & GridWorldModel.OBSTACLE) != 0) {
             drawObstacle(g, x, y);
         }
 
-        int vl = GridWorldModel.OBSTACLE*2; // the next object after OBSTACLE
+        int vl = GridWorldModel.OBSTACLE*2;
         while (vl < limit) {
             if ((model.data[x][y] & vl) != 0) {
                 draw(g, x, y, vl);
@@ -146,7 +130,6 @@ public class GridWorldView extends JFrame {
 
     class GridCanvas extends Canvas {
 
-        @Serial
         private static final long serialVersionUID = 1L;
 
         public void paint(Graphics g) {

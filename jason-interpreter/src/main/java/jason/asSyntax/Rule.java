@@ -68,7 +68,8 @@ public class Rule extends LiteralImpl {
 
     @Override
     public boolean equals(Object o) {
-        if (o != null && o instanceof Rule r) {
+        if (o != null && o instanceof Rule) {
+            Rule r = (Rule) o;
             return super.equals(o) && body.equals(r.body);
         }
         return false;
@@ -89,8 +90,8 @@ public class Rule extends LiteralImpl {
 
     @Override
     public Literal makeVarsAnnon(Unifier un) {
-        if (body instanceof Literal l)
-            l.makeVarsAnnon(un);
+        if (body instanceof Literal)
+            ((Literal)body).makeVarsAnnon(un);
         return super.makeVarsAnnon(un);
     }
 

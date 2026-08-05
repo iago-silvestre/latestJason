@@ -1,8 +1,10 @@
 package jason.asSyntax;
 
-import java.io.Serial;
 import java.io.StringReader;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -22,9 +24,8 @@ import jason.util.Config;
  */
 public class Structure extends Atom {
 
-    @Serial
     private static final long serialVersionUID = 1L;
-    private static final Logger logger = Logger.getLogger(Structure.class.getName());
+    private static Logger logger = Logger.getLogger(Structure.class.getName());
 
     protected static final List<Term> emptyTermList  = new ArrayList<>(0);
     protected static final Term[]     emptyTermArray = new Term[0]; // just to have a type for toArray in the getTermsArray method
@@ -110,11 +111,12 @@ public class Structure extends Atom {
         if (t == null) return false;
         if (t == this) return true;
 
-        if (t instanceof Structure tAsStruct) {
+        if (t instanceof Structure) {
+            Structure tAsStruct = (Structure)t;
 
             // if t is a VarTerm, uses var's equals
             if (tAsStruct.isVar())
-                return tAsStruct.equals(this);
+                return ((VarTerm)t).equals(this);
 
             final int ts = getArity();
             if (ts != tAsStruct.getArity())
@@ -222,7 +224,8 @@ public class Structure extends Atom {
     public Literal addTerms(Term ... ts ) {
         if (terms == null)
             terms = new ArrayList<>(5);
-        Collections.addAll(terms, ts);
+        for (Term t: ts)
+            terms.add(t);
         predicateIndicatorCache = null;
         resetHashCodeCache();
         return this;
@@ -232,7 +235,8 @@ public class Structure extends Atom {
     public Literal addTerms(List<Term> l) {
         if (terms == null)
             terms = new ArrayList<>(5);
-        terms.addAll(l);
+        for (Term t: l)
+            terms.add(t);
         predicateIndicatorCache = null;
         resetHashCodeCache();
         return this;
@@ -461,7 +465,7 @@ public class Structure extends Atom {
 
     /** get as XML */
     public Element getAsDOM(Document document) {
-        Element u = document.createElement("structure");
+        Element u = (Element) document.createElement("structure");
         u.setAttribute("functor",getFunctor());
         if (hasTerm()) {
             Element ea = document.createElement("arguments");

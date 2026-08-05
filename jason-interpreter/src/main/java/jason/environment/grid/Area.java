@@ -59,7 +59,7 @@ public final class Area implements Serializable {
     }
 
     public Object clone() {
-        return new Area((Location) tl.clone(), (Location) br.clone());
+        return new Area(tl,br);
     }
 
     public String toString() {

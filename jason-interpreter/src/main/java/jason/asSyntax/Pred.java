@@ -346,14 +346,8 @@ public class Pred extends Structure {
     public boolean hasSubsetAnnot(Literal p, Unifier u) {
         if (!hasAnnot())
             return true;
-        if (!p.hasAnnot()) {
-            // the special case of a[|T]=a
-            if (getAnnots().getTerm() == null && getAnnots().isTail()) {
-                return u.unifiesNoUndo(getAnnots().getTail(), ListTerm.EMPTY_LIST);
-            } else {
-                return false;
-            }
-        }
+        if (!p.hasAnnot())
+            return false;
 
         Term thisTail    = null;
 
@@ -550,8 +544,8 @@ public class Pred extends Structure {
                 if (ta != null) {
                     if (ta.isVar())
                         lt.setTerm(varToReplace(ta, un));
-                    else if (ta instanceof Structure s)
-                        s.makeVarsAnnon(un);
+                    else if (ta instanceof Structure)
+                        ((Structure)ta).makeVarsAnnon(un);
                 }
                 if (lt.isTail() && lt.getNext().isVar()) {
                     lt.setNext(varToReplace(lt.getNext(), un));

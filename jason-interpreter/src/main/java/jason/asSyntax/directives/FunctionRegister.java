@@ -10,7 +10,24 @@ import jason.asSemantics.ArithFunction;
 import jason.asSyntax.NumberTerm;
 import jason.asSyntax.Pred;
 import jason.asSyntax.StringTerm;
-import jason.functions.*;
+import jason.functions.Abs;
+import jason.functions.Average;
+import jason.functions.Length;
+import jason.functions.Max;
+import jason.functions.Min;
+import jason.functions.Random;
+import jason.functions.Round;
+import jason.functions.Sqrt;
+import jason.functions.StdDev;
+import jason.functions.Sum;
+import jason.functions.ceil;
+import jason.functions.e;
+import jason.functions.floor;
+import jason.functions.log;
+import jason.functions.mean;
+import jason.functions.median;
+import jason.functions.pi;
+import jason.functions.time;
 
 /**
  * This class maintains the set of arithmetic functions available for the AS parser.
@@ -20,33 +37,27 @@ import jason.functions.*;
 public class FunctionRegister extends DefaultDirective implements Directive {
     static Logger logger = Logger.getLogger(FunctionRegister.class.getName());
 
-    private final static Map<String,ArithFunction> functions = new HashMap<>();
+    private static Map<String,ArithFunction> functions = new HashMap<String,ArithFunction>();
 
     // add known global functions (can be computed without an agent reference)
     static {
         addJasonFunction(Abs.class);
-        addJasonFunction(acos.class);
-        addJasonFunction(asin.class);
-        addJasonFunction(atan.class);
-        addJasonFunction(Average.class);
-        addJasonFunction(ceil.class);
-        addJasonFunction(cos.class);
-        addJasonFunction(e.class);
-        addJasonFunction(floor.class);
-        addJasonFunction(Length.class);
-        addJasonFunction(log.class);
         addJasonFunction(Max.class);
-        addJasonFunction(mean.class);
         addJasonFunction(median.class);
         addJasonFunction(Min.class);
-        addJasonFunction(pi.class);
+        addJasonFunction(Sum.class);
+        addJasonFunction(StdDev.class);
+        addJasonFunction(Average.class);
+        addJasonFunction(mean.class);
+        addJasonFunction(Length.class);
         addJasonFunction(Random.class);
         addJasonFunction(Round.class);
-        addJasonFunction(sin.class);
         addJasonFunction(Sqrt.class);
-        addJasonFunction(StdDev.class);
-        addJasonFunction(Sum.class);
-        addJasonFunction(tan.class);
+        addJasonFunction(pi.class);
+        addJasonFunction(e.class);
+        addJasonFunction(floor.class);
+        addJasonFunction(ceil.class);
+        addJasonFunction(log.class);
         addJasonFunction(time.class);
     }
 
@@ -76,7 +87,7 @@ public class FunctionRegister extends DefaultDirective implements Directive {
     public static String checkFunctionName(String fName) {
         if (functions.get(fName) != null)
             return "Can not register the function "+fName+"  twice!";
-        else if (!fName.contains("."))
+        else if (fName.indexOf(".") < 0)
             return "The function "+fName+" was not registered! A function must have a '.' in its name.";
         else if (fName.startsWith("."))
             return "The function "+fName+" was not registered! An user function name can not start with '.'.";

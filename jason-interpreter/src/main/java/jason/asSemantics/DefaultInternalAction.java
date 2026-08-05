@@ -4,7 +4,6 @@ import jason.JasonException;
 import jason.asSyntax.Literal;
 import jason.asSyntax.Term;
 
-import java.io.Serial;
 import java.io.Serializable;
 
 /**
@@ -17,7 +16,6 @@ import java.io.Serializable;
  */
 public class DefaultInternalAction implements InternalAction, Serializable {
 
-    @Serial
     private static final long serialVersionUID = 1L;
 
     public boolean suspendIntention()   {

@@ -31,6 +31,7 @@ public class StartNewAgentGUI extends BaseDialogGUI {
     protected JTextField archClass;
     protected JTextField agClass;
     protected JTextField nbAgs;
+    protected JTextField agHost;
     @SuppressWarnings("rawtypes")
     protected JComboBox  verbose;
     String               openDir;
@@ -82,6 +83,10 @@ public class StartNewAgentGUI extends BaseDialogGUI {
         verbose.setSelectedIndex(1);
         createField("Verbose", verbose, "Set the verbose level");
 
+        agHost = new JTextField(10);
+        agHost.setText("localhost");
+        createField("Host to run", agHost, "The host where this agent will run. The infrastructure must support distributed launching.");
+
         JPanel p = new JPanel(new BorderLayout());
         p.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Agent parameters", TitledBorder.LEFT, TitledBorder.TOP));
         p.add(pLabels, BorderLayout.CENTER);
@@ -97,13 +102,13 @@ public class StartNewAgentGUI extends BaseDialogGUI {
             JOptionPane.showMessageDialog(this, "An agent name must be informed.");
             return false;
         }
-//        if (ap.getSource() == null) {
-//            try {
-//                ap.setSource(ap.name + "." + MAS2JProject.AS_EXT);
-//            } catch (Exception e) {
-//                e.printStackTrace();
-//            }
-//        }
+        if (ap.getSource() == null) {
+            try {
+                ap.setSource(ap.name + "." + MAS2JProject.AS_EXT);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
         /*if (!ap.asSource.exists()) {
             JOptionPane.showMessageDialog(this, "The source file '" + ap.asSource + "' does not exist!");
             return false;
@@ -124,10 +129,7 @@ public class StartNewAgentGUI extends BaseDialogGUI {
                             name = name + (i + 1);
                         }
                         // TODO: implements bb class
-                        String src = null;
-                        if (ap.getSource() != null)
-                            src = ap.getSource().toString();
-                        name = services.createAgent(name, src, agClass, ap.getAgArchClasses(), null, ap.getAsSetts(debug, fs), null);
+                        name = services.createAgent(name, ap.getSource().toString(), agClass, ap.getAgArchClasses(), null, ap.getAsSetts(debug, fs), null);
                         services.startAgent(name);
                     }
                 } catch (Exception e) {
@@ -177,6 +179,9 @@ public class StartNewAgentGUI extends BaseDialogGUI {
             } catch (Exception e) {
                 System.err.println("Number of hosts is not a number!");
             }
+        }
+        if (!agHost.getText().trim().equals("localhost")) {
+            ap.setHost(agHost.getText().trim());
         }
         return ap;
     }

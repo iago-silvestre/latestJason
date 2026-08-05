@@ -16,7 +16,7 @@ import jason.asSyntax.Term;
   This class can be used in place of DefaultInternalAction to create an IA that
   suspend the intention while it is being executed.
 
-  Example: a plan may ask something to a user and wait the answer.
+  Example: a plan may ask something to an user and wait the answer.
   If DefaultInternalAction is used for that, all the agent thread is blocked until
   the answer. With ConcurrentInternalAction, only the intention using the IA is
   suspended. See demos/gui/gui1.
@@ -57,7 +57,7 @@ import jason.asSyntax.Term;
 */
 public abstract class ConcurrentInternalAction implements InternalAction {
 
-    private static final AtomicInteger actCount = new AtomicInteger(0);
+    private static AtomicInteger actcount  = new AtomicInteger(0);
 
     public boolean canBeUsedInContext() {
         return false;
@@ -88,7 +88,7 @@ public abstract class ConcurrentInternalAction implements InternalAction {
      * @return the final key used to store the intention in PI, this key is used the resume the intention
      */
     public String suspendInt(final TransitionSystem ts, String basekey, int timeout) {
-        final String key = basekey + "/" + (actCount.incrementAndGet());
+        final String key = basekey + "/" + (actcount.incrementAndGet());
         final Circumstance C = ts.getC();
         Intention i = C.getSelectedIntention();
         i.setSuspended(true);
@@ -96,10 +96,12 @@ public abstract class ConcurrentInternalAction implements InternalAction {
 
         if (timeout > 0) {
             // schedule a future test of the end of the action
-            Agent.getScheduler().schedule(() -> {
-                // finish the IA by timeout
-                if (C.getPendingIntentions().get(key) != null) { // test if the intention is still there
-                    timeout(ts,key);
+            Agent.getScheduler().schedule( new Runnable() {
+                public void run() {
+                    // finish the IA by timeout
+                    if (C.getPendingIntentions().get(key) != null) { // test if the intention is still there
+                        timeout(ts,key);
+                    }
                 }
             }, timeout, TimeUnit.MILLISECONDS);
         }

@@ -81,7 +81,8 @@ public class Atom extends Literal {
     public boolean equals(Object o) {
         if (o == null) return false;
         if (o == this) return true;
-        if (o instanceof Atom a) {
+        if (o instanceof Atom) {
+            Atom a = (Atom)o;
             //System.out.println(getFunctor() +" ==== " + a.getFunctor() + " atom "+ a.isAtom() + " ns " + getNS() + "/" + a.getNS()); // && getFunctor().equals(a.getFunctor())));
             return a.isAtom() && getFunctor().equals(a.getFunctor()) && getNS().equals(a.getNS());
         }
@@ -112,7 +113,8 @@ public class Atom extends Literal {
         if (t.isVar())
             return -1;
 
-        if (t instanceof Literal tAsLit) {
+        if (t instanceof Literal) {
+            Literal tAsLit = (Literal)t;
             if (!getNS().equals(tAsLit.getNS())) // different ns
                 return getNS().compareTo(tAsLit.getNS());
 

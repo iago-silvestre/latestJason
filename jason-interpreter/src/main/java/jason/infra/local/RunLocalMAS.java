@@ -1,70 +1,80 @@
 package jason.infra.local;
 
+import java.awt.FlowLayout;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.management.ManagementFactory;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.ConsoleHandler;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogManager;
+import java.util.logging.Logger;
+
+import javax.management.ObjectName;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+
 import jason.JasonException;
 import jason.architecture.AgArch;
-import jason.architecture.MindInspectorWeb;
 import jason.asSemantics.Agent;
 import jason.asSyntax.NumberTermImpl;
-import jason.pl.PlanLibrary;
+import jason.asSyntax.PlanLibrary;
 import jason.asSyntax.Trigger;
 import jason.asSyntax.directives.DirectiveProcessor;
 import jason.asSyntax.directives.Include;
 import jason.bb.DefaultBeliefBase;
 import jason.control.ExecutionControlGUI;
 import jason.infra.components.CircumstanceListenerComponents;
+import jason.infra.repl.ReplAgGUI;
 import jason.mas2j.AgentParameters;
 import jason.mas2j.ClassParameters;
 import jason.mas2j.MAS2JProject;
 import jason.mas2j.parser.ParseException;
-import jason.runtime.*;
+import jason.runtime.MASConsoleGUI;
+import jason.runtime.MASConsoleLogFormatter;
+import jason.runtime.MASConsoleLogHandler;
+import jason.runtime.RuntimeServices;
+import jason.runtime.RuntimeServicesFactory;
+import jason.runtime.Settings;
+import jason.runtime.SourcePath;
 import jason.util.Config;
 
-import javax.management.ObjectName;
-import javax.swing.*;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
-import java.awt.*;
-import java.io.*;
-import java.lang.management.ManagementFactory;
-import java.net.InetAddress;
-import java.net.MalformedURLException;
-import java.net.ServerSocket;
-import java.net.URL;
-import java.rmi.RemoteException;
-import java.rmi.registry.LocateRegistry;
-import java.rmi.server.ExportException;
-import java.rmi.server.UnicastRemoteObject;
-import java.util.List;
-import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.*;
-
 /**
- * Runs MASProject using *Local* infrastructure.
+ * Runs MASProject using Local infrastructure.
  */
 public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
-
-    protected static Logger logger = Logger.getLogger(RunLocalMAS.class.getName());
 
     private JButton  btDebug;
     protected boolean  isRunning = false;
 
     protected List<LocalAgArch> createdAgents = new ArrayList<>();
 
-    protected Map<String,Object> initArgs = new HashMap<>();
-
-
     public RunLocalMAS() {
         super();
-        try {
-            if (RuntimeServicesFactory.get() == null || !RuntimeServicesFactory.get().isRunning()) {
-                RuntimeServicesFactory.set(new LocalRuntimeServices(this));
-            }
-        } catch (RemoteException e) {
-            throw new RuntimeException(e);
-        }
+        if (RuntimeServicesFactory.get() == null)
+            RuntimeServicesFactory.set( new LocalRuntimeServices(this) );
         runner = this;
     }
 
@@ -81,8 +91,6 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
         runner = r;
         r.init(args);
         r.registerMBean();
-        r.registerInRMI();
-        r.registerWebMindInspector();
         r.create();
         r.start();
         r.waitEnd();
@@ -90,10 +98,6 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
     }
 
     protected void registerMBean() {
-        if ((boolean)(initArgs.getOrDefault("no-mbean", false))) {
-            return;
-        }
-
         try {
             ManagementFactory.getPlatformMBeanServer().registerMBean(this, new ObjectName("jason.sf.net:type=runner"));
         } catch (Exception e) {
@@ -101,55 +105,34 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
         }
     }
 
-    protected void registerWebMindInspector() {
-        if ("false".equals(Config.get().getProperty(Config.START_WEB_MI)))
-            return;
-
-        try {
-            MindInspectorWeb.get(); // to start http server for jason
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void addInitArg(String k, Object v) {
-        initArgs.put(k,v);
-    }
-
-    public int init(String[] args) {
-        parseArgs(args);
-
+    protected int init(String[] args) {
         String projectFileName = null;
         if (args.length < 1) {
             if (RunLocalMAS.class.getResource("/"+defaultProjectFileName) != null) {
                 projectFileName = defaultProjectFileName;
                 appFromClassPath = true;
-                //Config.get(false); // to void to call fix/store the configuration in this case everything is read from a jar file
+                Config.get(false); // to void to call fix/store the configuration in this case everything is read from a jar/jnlp file
             } else {
-                if (!(boolean)(initArgs.getOrDefault("empty-mas", false))) {
-                    System.out.println("Jason " + Config.get().getJasonVersion());
-                    System.err.println("You should inform the MAS project file.");
-                    //JOptionPane.showMessageDialog(null,"You should inform the project file as a parameter.\n\nJason version "+Config.get().getJasonVersion()+" library built on "+Config.get().getJasonBuiltDate(),"Jason", JOptionPane.INFORMATION_MESSAGE);
-                    System.exit(1);
-                }
+                System.out.println("Jason "+Config.get().getJasonVersion());
+                System.err.println("You should inform the MAS project file.");
+                //JOptionPane.showMessageDialog(null,"You should inform the project file as a parameter.\n\nJason version "+Config.get().getJasonVersion()+" library built on "+Config.get().getJasonBuiltDate(),"Jason", JOptionPane.INFORMATION_MESSAGE);
+                System.exit(0);
             }
-        } else if (!args[0].startsWith("-")) {
+        } else {
             projectFileName = args[0];
         }
 
-        // load jason.properties if it exists
-        if (Config.get().getLocalConfFile().exists())
-            Config.get().load();
-
         if (Config.get().getJasonJar() == null) {
-            //System.out.println("Jason is not configured");
+            //System.out.println("Jason is not configured, creating a default configuration");
             Config.get().setShowFixMsgs(false);
             Config.get().fix();
         }
 
-        setupLogger((String) initArgs.get("log-conf"));
+        Map<String,Object> mArgs = parseArgs(args);
 
-        if ((boolean)(initArgs.getOrDefault("debug", false))) {
+        setupLogger((String)mArgs.get("log-conf"));
+
+        if ((boolean)(mArgs.getOrDefault("debug", false))) {
             debug = true;
             Logger.getLogger("").setLevel(Level.FINE);
         }
@@ -174,7 +157,7 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
                     urlPrefix = SourcePath.CRPrefix;
                 } else {
                     URL file;
-                    // test if the argument is a URL
+                    // test if the argument is an URL
                     try {
                         projectFileName = new SourcePath().fixPath(projectFileName); // replace $jasonJar, if necessary
                         file = new URL(projectFileName);
@@ -195,7 +178,7 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
             project.setupDefault();
             project.getSourcePaths().addPath(urlPrefix);
             project.registerDirectives();
-            // set the aslSrcPath in the 'include'
+            // set the aslSrcPath in the include
             ((Include)DirectiveProcessor.getDirective("include")).setSourcePath(project.getSourcePaths());
 
             project.fixAgentsSrc();
@@ -229,113 +212,34 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
         return errorCode;
     }
 
-    protected void parseArgs(String[] args) {
+    protected Map<String,Object> parseArgs(String[] args) {
+        Map<String, Object> margs = new HashMap<>();
+
         if (args.length > 0) {
             String la = "";
             for (String arg: args) {
-                arg = arg.trim();
                 if (la.equals("--log-conf")) {
-                    initArgs.put("log-conf", arg);
-                }
-
-                if (arg.equals("--empty-mas")) {
-                    initArgs.put("empty-mas", true);
-                }
-
-                if (arg.equals("--no-rmi")) {
-                    initArgs.put("no-rmi", true);
-                }
-                if (arg.equals("--no-mbean")) {
-                    initArgs.put("no-mbean", true);
-                }
-                if (arg.equals("--no-mindinspector")) {
-                    initArgs.put("no-mindinspector", true);
-                    Config.get().put( Config.START_WEB_MI, "false");
-                }
-                if (arg.equals("--no-net")) {
-                    initArgs.put("no-mbean", true);
-                    initArgs.put("no-rmi", true);
-                    initArgs.put("no-mindinspector", true);
-                    Config.get().put( Config.START_WEB_MI, "false");
+                    margs.put("log-conf", arg);
                 }
                 if (arg.equals("--debug") || arg.equals("-d"))
-                    initArgs.put("debug", true);
+                    margs.put("debug", true);
 
                 la = arg;
             }
         }
-    }
 
-    public static final String RMI_PREFIX_RTS = "jason-rst-";
-    public static final String RUNNING_MAS_FILE_NAME = "jason-cmd-server";
-
-    protected void registerInRMI() {
-        if ((boolean)(initArgs.getOrDefault("no-rmi", false))) {
-            return;
-        }
-
-        try {
-            var server = RuntimeServicesFactory.get();
-            if (server == null)
-                return;
-
-            RuntimeServices rtStub = (RuntimeServices) UnicastRemoteObject.exportObject((RuntimeServices) server, 0);
-            String name = RMI_PREFIX_RTS + project.getSocName();
-
-            // find a free port
-            int port = 0;
-            try (var serverSocket = new ServerSocket(0)) {
-                port = serverSocket.getLocalPort();
-            } catch (IOException e) {
-                port = 1099;
-            }
-
-            var registry = LocateRegistry.createRegistry(port);
-            registry.rebind(name, rtStub);
-            var addr = InetAddress.getLocalHost().getHostAddress()+":"+port;
-            storeRunningMASInCommonFile(project.getSocName(), addr);
-
-            System.out.println("Runtime Services (RTS) is running at "+addr);
-        } catch (ExportException e) {
-            // ignore object already exported
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    public static File getRunningMASFile() {
-        var  tmp = System.getProperty("java.io.tmpdir");
-        if (!tmp.endsWith(File.separator))
-            tmp  += File.separator;
-        return new File(tmp + RUNNING_MAS_FILE_NAME);
-    }
-
-    public void storeRunningMASInCommonFile(String masName, String address) {
-        try {
-            var props = new Properties();
-
-            var f = getRunningMASFile();
-            if (f.exists()) {
-                props.load(new FileReader(f));
-            }
-            props.put("latest___mas", masName);
-            props.put(masName, address);
-            props.store(new FileWriter(f),"running mas in jason");
-            // System.out.println("store server data in "+f.getAbsolutePath());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        return margs;
     }
 
     /** create environment, agents, controller */
-    public void create() throws JasonException {
+    protected void create() throws JasonException {
         createEnvironment();
         createAgs();
         createController();
     }
 
     /** start agents, .... */
-    public void start() {
+    protected void start() {
         isRunning = true;
         startAgs();
         startSyncMode();
@@ -356,8 +260,8 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
                         RunLocalMAS.class.getResource("/"+logPropFile).openStream());
             } catch (Exception e) {
                 Handler[] hs = Logger.getLogger("").getHandlers();
-                for (Handler handler : hs) {
-                    Logger.getLogger("").removeHandler(handler);
+                for (int i = 0; i < hs.length; i++) {
+                    Logger.getLogger("").removeHandler(hs[i]);
                 }
                 Handler h = new MASConsoleLogHandler();
                 h.setFormatter(new MASConsoleLogFormatter());
@@ -369,7 +273,7 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
                 confFile = new SourcePath().fixPath(confFile);
                 URL logurl = new URL(confFile);
                 LogManager.getLogManager().readConfiguration( logurl.openStream() );
-                logger.fine("logging configuration was loaded from "+logurl);
+                System.out.println("logging configuration was loaded from "+logurl);
             } catch (Exception e) {
                 System.err.println("Error setting up logger:" + e);
                 e.printStackTrace();
@@ -380,7 +284,7 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
                 confFile = logPropFile;
             } else {
                 if (!(new File(confFile).exists()))
-                   System.err.println("Logging properties file "+confFile+" not found!");
+                   System.err.println("Loggging properties file "+confFile+" not found!");
             }
 
             // checks a local log configuration file
@@ -411,8 +315,8 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
 
     protected void setupDefaultConsoleLogger() {
         Handler[] hs = Logger.getLogger("").getHandlers();
-        for (Handler handler : hs) {
-            Logger.getLogger("").removeHandler(handler);
+        for (int i = 0; i < hs.length; i++) {
+            Logger.getLogger("").removeHandler(hs[i]);
         }
         Handler h = new ConsoleHandler();
         h.setFormatter(new MASConsoleLogFormatter());
@@ -428,13 +332,15 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
 
         // add Button debug
         btDebug = new JButton("Debug", new ImageIcon(RunLocalMAS.class.getResource("/images/debug.gif")));
-        btDebug.addActionListener(evt -> {
-            changeToDebugMode();
-            btDebug.setEnabled(false);
-            if (runner.control != null) {
-                try {
-                    runner.control.getUserControl().setRunningCycle(false);
-                } catch (Exception e) { }
+        btDebug.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent evt) {
+                changeToDebugMode();
+                btDebug.setEnabled(false);
+                if (runner.control != null) {
+                    try {
+                        runner.control.getUserControl().setRunningCycle(false);
+                    } catch (Exception e) { }
+                }
             }
         });
         if (debug) {
@@ -444,36 +350,48 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
 
         // add Button start
         final JButton btStartAg = new JButton("New agent", new ImageIcon(RunLocalMAS.class.getResource("/images/newAgent.gif")));
-        btStartAg.addActionListener(
-                evt -> new StartNewAgentGUI(MASConsoleGUI.get().getFrame(), "Start a new agent to run in current MAS", System.getProperty("user.dir")));
+        btStartAg.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent evt) {
+                new StartNewAgentGUI(MASConsoleGUI.get().getFrame(), "Start a new agent to run in current MAS", System.getProperty("user.dir"));
+            }
+        });
         MASConsoleGUI.get().addButton(btStartAg);
 
         // add Button kill
         final JButton btKillAg = new JButton("Kill agent", new ImageIcon(RunLocalMAS.class.getResource("/images/killAgent.gif")));
-        btKillAg.addActionListener(
-                evt -> new KillAgentGUI(MASConsoleGUI.get().getFrame(), "Kill an agent of the current MAS"));
+        btKillAg.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent evt) {
+                new KillAgentGUI(MASConsoleGUI.get().getFrame(), "Kill an agent of the current MAS");
+            }
+        });
         MASConsoleGUI.get().addButton(btKillAg);
 
         createNewReplAgButton();
 
         // add show sources button
         final JButton btShowSrc = new JButton("Sources", new ImageIcon(RunLocalMAS.class.getResource("/images/list.gif")));
-        btShowSrc.addActionListener(evt -> showProjectSources(project));
+        btShowSrc.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent evt) {
+                showProjectSources(project);
+            }
+        });
         MASConsoleGUI.get().addButton(btShowSrc);
 
     }
 
     protected void createPauseButton() {
         final JButton btPause = new JButton("Pause", new ImageIcon(RunLocalMAS.class.getResource("/images/resume_co.gif")));
-        btPause.addActionListener(evt -> {
-            if (MASConsoleGUI.get().isPause()) {
-                btPause.setText("Pause");
-                MASConsoleGUI.get().setPause(false);
-            } else {
-                btPause.setText("Continue");
-                MASConsoleGUI.get().setPause(true);
-            }
+        btPause.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent evt) {
+                if (MASConsoleGUI.get().isPause()) {
+                    btPause.setText("Pause");
+                    MASConsoleGUI.get().setPause(false);
+                } else {
+                    btPause.setText("Continue");
+                    MASConsoleGUI.get().setPause(true);
+                }
 
+            }
         });
         MASConsoleGUI.get().addButton(btPause);
     }
@@ -481,45 +399,42 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
     protected void createStopButton() {
         // add Button
         JButton btStop = new JButton("Stop", new ImageIcon(RunLocalMAS.class.getResource("/images/suspend.gif")));
-        btStop.addActionListener(evt -> {
-            MASConsoleGUI.get().setPause(false);
-            runner.finish(0, true, 0);
+        btStop.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent evt) {
+                MASConsoleGUI.get().setPause(false);
+                runner.finish(0, true, 0);
+            }
         });
         MASConsoleGUI.get().addButton(btStop);
     }
 
     protected void createNewReplAgButton() {
         // add Button debug
-        final JButton btStartAg = new JButton("REPL agent", new ImageIcon(RunLocalMAS.class.getResource("/images/newAgent.gif")));
-        btStartAg.addActionListener(evt -> {
-            final JFrame f = new JFrame("select the agent");
-            f.setLayout(new FlowLayout());
-            try {
-                var agNames = new Vector( ags.keySet() );
-                Collections.sort(agNames);
-                var lAgs = new JList(agNames);
-                f.getContentPane().add(lAgs);
-                lAgs.addListSelectionListener(new ListSelectionListener() {
-                    boolean done = false;
-                    @Override
-                    public void valueChanged(ListSelectionEvent e) {
-                        if (done) return;
-                        done = true;
+        final JButton btStartAg = new JButton("New REPL agent", new ImageIcon(RunLocalMAS.class.getResource("/images/newAgent.gif")));
+        btStartAg.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent evt) {
+                final JFrame f = new JFrame("New REPL Agent, give it a name");
+                //f.getContentPane().setLayout(new BorderLayout());
+                //f.getContentPane().add(BorderLayout.NORTH,command);
+                //f.getContentPane().add(BorderLayout.CENTER,mindPanel);
+                final JTextField n = new JTextField(30);
+                n.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent e) {
                         f.setVisible(false);
-                        new ReplAgGUI().init( ags.get(agNames.get(e.getFirstIndex())).getTS().getAg());
+                        createReplAg(n.getText());
                     }
                 });
-            } catch (Exception e) {
-                e.printStackTrace();
+                f.setLayout(new FlowLayout());
+                f.add(n);
+                f.pack();
+                f.setLocation((int)btStartAg.getLocationOnScreen().x, (int)btStartAg.getLocationOnScreen().y+30);
+                f.setVisible(true);
             }
-            f.pack();
-            f.setLocation((int)btStartAg.getLocationOnScreen().x, (int)btStartAg.getLocationOnScreen().y+30);
-            f.setVisible(true);
         });
         MASConsoleGUI.get().addButton(btStartAg);
     }
 
-    /*protected void createReplAg(String n) {
+    protected void createReplAg(String n) {
         LocalAgArch agArch = new LocalAgArch();
         try {
             agArch.setAgName(n);
@@ -532,7 +447,7 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
             e1.printStackTrace();
         }
         addAg(agArch);
-    }*/
+    }
 
 
     protected void createEnvironment() throws JasonException {
@@ -544,6 +459,7 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
 
 
     protected void createAgs() throws JasonException {
+
         RConf generalConf = RConf.fromString(project.getInfrastructure().getParameter(0));
 
         int nbAg = 0;
@@ -626,7 +542,7 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
                         agArch.createArchs(ap.getAgArchClasses(), ap.agClass.getClassName(), ap.getBBClass(), ap.getSource().toString(), ap.getAsSetts(debug, project.getControlClass() != null));
                     }
                     addAg(agArch);
-                    createdAgents.add(agArch); // used later to start
+                    createdAgents.add(agArch); // used latter to start
 
                     pag = agArch.getTS().getAg();
                 }
@@ -639,6 +555,8 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
 
         if (generalConf != RConf.THREADED) logger.info("Created "+nbAg+" agents.");
     }
+
+
 
     protected void createController() throws JasonException {
         ClassParameters controlClass = project.getControlClass();
@@ -682,15 +600,14 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
         for (LocalAgArch ag : createdAgents) { //  ags.values()) { <<< removed, since agent can be created meanwhile and re-started here
             ag.setControlInfraTier(control);
 
-            // if the agent hasn't overridden the values for cycles, use the platform values
+            // if the agent hasn't override the values for cycles, use the platform values
             if (ag.getCyclesSense() == -1)            ag.setCyclesSense(cyclesSense);
             if (ag.getCyclesDeliberate() == -1)       ag.setCyclesDeliberate(cyclesDeliberate);
             if (ag.getCyclesAct() == -1)              ag.setCyclesAct(cyclesAct);
 
             // create the agent thread
             if (ag.getThread() == null)
-                //ag.setThread(new Thread(ag));
-                ag.setThread( Thread.ofVirtual().unstarted(ag) );
+                ag.setThread(new Thread(ag));
         }
 
         //logger.info("Creating threaded agents. Cycles: " + agTemp.getCyclesSense() + ", " + agTemp.getCyclesDeliberate() + ", " + agTemp.getCyclesAct());
@@ -710,7 +627,7 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
 
     /** creates a pool of threads shared by all agents */
     private void createThreadPool() {
-        sleepingAgs = Collections.synchronizedSet(new HashSet<>());
+        sleepingAgs = Collections.synchronizedSet(new HashSet<LocalAgArch>());
 
         int maxthreads = 10;
 
@@ -755,7 +672,7 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
                     logger.info("Creating agents with asynchronous reasoning cycle (shared). Sense, Deliberate, Act (" + maxthreads + "). Cycles: " + cyclesSense + ", " + cyclesDeliberate + ", " + cyclesAct);
                     executorSense = executorDeliberate = executorAct = Executors.newFixedThreadPool(maxthreads);
 
-                } else { // pool cases
+                } else { // pool c  ases
                     if (conf == RConf.POOL_SYNCH) {
                         // redefine cycles
                         if (infra.getParametersArray().length == 3) {
@@ -788,10 +705,12 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
             if (ag.getCyclesAct() == -1)        ag.setCyclesAct(cyclesAct);
 
             if (executor != null) {
-                if (ag instanceof LocalAgArchForPool agp)
-                    agp.setExecutor(executor);
+                if (ag instanceof LocalAgArchForPool)
+                    ((LocalAgArchForPool)ag).setExecutor(executor);
                 executor.execute(ag);
-            } else if (ag instanceof LocalAgArchAsynchronous ag2) {
+            } else if (ag instanceof LocalAgArchAsynchronous) {
+                LocalAgArchAsynchronous ag2 = (LocalAgArchAsynchronous) ag;
+
                 ag2.addListenerToC(new CircumstanceListenerComponents(ag2));
 
                 ag2.setExecutorAct(executorAct);
@@ -808,7 +727,6 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
 
     /** an agent architecture for the infra based on thread pool */
     protected final class LocalAgArchSynchronousScheduled extends LocalAgArch {
-        @Serial
         private static final long serialVersionUID = 2752327732263465482L;
 
         private volatile boolean runWakeAfterTS = false;
@@ -902,7 +820,7 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
             try {
                 ag.stopAg();
             } catch (Throwable e) {
-                // ignore, the stop of agent should handle that
+                // ignore, the stop of agent should handled that
                 // here, just keep stopping the system
             }
             delAg(ag.getAgName());
@@ -910,11 +828,7 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
     }
 
     public boolean killAg(String agName) {
-        try {
-            return RuntimeServicesFactory.get().killAgent(agName, "??", 0);
-        } catch (RemoteException e) {
-            throw new RuntimeException(e);
-        }
+        return RuntimeServicesFactory.get().killAgent(agName, "??", 0);
     }
 
     /** change the current running MAS to debug mode */
@@ -950,7 +864,7 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
         }
     }
 
-    public void waitEnd() {
+    protected void waitEnd() {
         try {
             // wait a file called .stop___MAS to be created!
             File stop = new File(stopMASFileName);
@@ -992,40 +906,44 @@ public class RunLocalMAS extends BaseLocalMAS implements RunLocalMASMBean {
             }
 
             // use a thread to not block the caller
-            new Thread(() -> {
-                System.out.flush();
-                System.err.flush();
+            new Thread() {
+                public void run() {
+                    System.out.flush();
+                    System.err.flush();
 
-                if (MASConsoleGUI.hasConsole()) { // should close first! (case where console is in pause)
-                    MASConsoleGUI.get().close();
-                }
+                    if (MASConsoleGUI.hasConsole()) { // should close first! (case where console is in pause)
+                        MASConsoleGUI.get().close();
+                    }
 
-                stopAgs(deadline);
+                    stopAgs(deadline);
 
-                if (control != null) {
-                    control.stop();
-                    control = null;
-                }
-                if (env != null) {
-                    env.stop();
-                    env = null;
-                }
+                    if (control != null) {
+                        control.stop();
+                        control = null;
+                    }
+                    if (env != null) {
+                        env.stop();
+                        env = null;
+                    }
 
-                // remove the .stop___MAS file  (note that GUI console.close(), above, creates this file)
-                File stop = new File(stopMASFileName);
-                if (stop.exists()) {
-                    stop.delete();
-                }
+                    // remove the .stop___MAS file  (note that GUI console.close(), above, creates this file)
+                    File stop = new File(stopMASFileName);
+                    if (stop.exists()) {
+                        stop.delete();
+                    }
 
-                try {
-                    ManagementFactory.getPlatformMBeanServer().unregisterMBean(new ObjectName("jason.sf.net:type=runner"));
-                } catch (Exception e) {}
+                    try {
+                        ManagementFactory.getPlatformMBeanServer().unregisterMBean(new ObjectName("jason.sf.net:type=runner"));
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
 
-                if (stopJVM) {
-                    System.exit(exitValue);
-                }
-                isRunningFinish.set(false);
-            }).start();
+                    if (stopJVM) {
+                        System.exit(exitValue);
+                    }
+                    isRunningFinish.set(false);
+                };
+            }.start();
 
         } catch (Exception e) {
             e.printStackTrace();

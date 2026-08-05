@@ -502,7 +502,10 @@ PlanBody plan_body_factor() :
 {
   Object F; PlanBody R = null;
 }
-{ F = body_formula()   { if (!(F instanceof PlanBody)) throw new ParseException(getSourceRef(F)+" "+F+" is not a body literal!"); } // Dúvida: Existe algum controle aqui que envolvia os if/for/while?
+{
+  F = body_formula()    {
+                          if (!(F instanceof PlanBody)) throw new ParseException(getSourceRef(F)+" "+F+" is not a body literal!"); // Dúvida: Existe algum controle aqui que envolvia os if/for/while?
+                        }
   [ <TK_PAND> R = plan_body_factor() ]
                         {
                           if (R == null)
@@ -641,7 +644,7 @@ Object body_formula() :
       B = literal()
     )
     |
-    (
+      (
         [
           "?"             { formType = BodyType.test; }
           |
@@ -658,17 +661,9 @@ Object body_formula() :
               | "-"       { formType = BodyType.delBelNewFocus; }
             ]
         ]
-
-        // look for "(!g3 ||| !g4)" against "(X > 2)" / plan body agains log expression
-        ( LOOKAHEAD(log_expr())
-          B = log_expr()
-        |
-          LOOKAHEAD("(" plan_body())
-          "(" B = plan_body() ")"
-        )
-    )
+        B = log_expr()
+      )
   )
-
 
                         {
                           if (formType == BodyType.action && B instanceof RelExpr) {
@@ -795,7 +790,7 @@ Pred plan_term_annotation() :
                               p = new Pred(K.image);
                               p.setSrcInfo(new SourceInfo(asSource, K.beginLine));
                             } else {
-                              p = new Pred("undefined"); // plan as term should not get an unique ID, it usually is used as var and undefied should be replace by unique ID at run time
+                              p = new Pred("undefined");
                             }
                             if (annots != null) {
                               p.addAnnots(annots.getAsList());

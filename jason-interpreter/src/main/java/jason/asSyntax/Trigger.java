@@ -52,17 +52,16 @@ public class Trigger extends Structure implements Cloneable {
     public enum TEType {
         belief  { public String toString() {
                 return "";
-            } },
+            }
+        },
         achieve { public String toString() {
                 return "!";
-            } },
+            }
+        },
         test    { public String toString() {
                 return "?";
-            } },
-
-        signal {  public String toString() {
-            return "";
-        } }
+            }
+        }
     };
 
 
@@ -126,17 +125,15 @@ public class Trigger extends Structure implements Cloneable {
         predicateIndicatorCache  = null;
     }
 
+
     public boolean sameType(Trigger e) {
-        return operator == e.operator
-                && (type == e.type
-                    || (type == TEType.signal && e.type == TEType.belief)
-                    || (type == TEType.belief && e.type == TEType.signal)
-                   );
+        return operator == e.operator && type == e.type;
     }
 
     @Override
     public boolean equals(Object o) {
-        if (o != null && o instanceof Trigger t) {
+        if (o != null && o instanceof Trigger) {
+            Trigger t = (Trigger) o;
             return (operator == t.operator && type == t.type && literal.equals(t.getLiteral()));
         }
         return false;
@@ -144,10 +141,6 @@ public class Trigger extends Structure implements Cloneable {
 
     public boolean isAchvGoal() {
         return type == TEType.achieve;
-    }
-
-    public boolean isFailureGoal() {
-        return type == TEType.achieve && operator == TEOperator.del;
     }
 
     public boolean isGoal() {
@@ -170,8 +163,6 @@ public class Trigger extends Structure implements Cloneable {
     public TEType getType() {
         return type;
     }
-
-    public void setType(TEType t) { type = t; }
 
     public boolean isAddition() {
         return operator == TEOperator.add;
@@ -266,4 +257,5 @@ public class Trigger extends Structure implements Cloneable {
         e.appendChild(literal.getAsDOM(document));
         return e;
     }
+
 }

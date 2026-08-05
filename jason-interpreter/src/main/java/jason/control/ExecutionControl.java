@@ -2,7 +2,6 @@ package jason.control;
 
 import jason.runtime.RuntimeServices;
 
-import java.rmi.RemoteException;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -16,7 +15,7 @@ import java.util.logging.Logger;
 /**
  * Base class for the user implementation of execution control.
  *
- * <p>This default implementation synchronise agents execution, i.e.,
+ * <p>This default implementation synchronise the agents execution, i.e.,
  * each agent will perform its next reasoning cycle only when all agents have
  * finished its reasoning cycle.
  *
@@ -94,11 +93,7 @@ public class ExecutionControl {
      *  implementation, considers all agents in the MAS as actors .
      */
     public void updateNumberOfAgents() {
-        try {
-            setNbAgs(runtime.getAgentsQty());
-        } catch (RemoteException e) {
-            throw new RuntimeException(e);
-        }
+        setNbAgs(runtime.getAgentsQty());
     }
 
     /** Returns the number of agents in the MAS (used to test the end of a cycle) */

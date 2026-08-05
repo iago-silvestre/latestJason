@@ -5,5 +5,7 @@ public class RuntimeServicesFactory {
     static public void set(RuntimeServices s) {
         singleton = s;
     }
-    static public RuntimeServices get() { return singleton; }
+    static public RuntimeServices get() {
+        return singleton;
+    }
 }

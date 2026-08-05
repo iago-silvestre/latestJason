@@ -1,6 +1,5 @@
 package jason.asSyntax;
 
-import java.io.Serial;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -48,9 +47,8 @@ import jason.asSyntax.parser.as2j;
  */
 public abstract class Literal extends DefaultTerm implements LogicalFormula {
 
-    @Serial
     private static final long serialVersionUID = 1L;
-    private static final Logger logger = Logger.getLogger(Literal.class.getName());
+    private static Logger logger = Logger.getLogger(Literal.class.getName());
 
     public static final boolean LPos   = true;
     public static final boolean LNeg   = false;
@@ -61,7 +59,7 @@ public abstract class Literal extends DefaultTerm implements LogicalFormula {
 
     protected PredicateIndicator predicateIndicatorCache = null; // to not compute it all the time (it is used many many times)
 
-    /** @deprecated ASSyntax.parseLiteral or createLiteral are preferred. */
+    /** creates a new literal by parsing a string -- ASSyntax.parseLiteral or createLiteral are preferred. */
     public static Literal parseLiteral(String sLiteral) {
         try {
             as2j parser = new as2j(new StringReader(sLiteral));
@@ -90,7 +88,7 @@ public abstract class Literal extends DefaultTerm implements LogicalFormula {
     }
 
 
-    /** returns the space name of this literal */
+    /** returns the name spaceof this literal */
     public abstract Atom getNS();
 
     @Override
@@ -497,7 +495,7 @@ public abstract class Literal extends DefaultTerm implements LogicalFormula {
 	                            	if (isInDebug) ag.getLogger().log(Level.FINE, "     | for "+Literal.this+", belief "+belInBB+" is an option -- "+u);
 	                                current = u;
 	                                return;
-	                            //} else {
+	                            } else {
 	                            	//if (isInDebug) ag.getLogger().log(Level.FINE, "     | belief "+belInBB+" is NOT an option for "+ Literal.this+ " -- "+u);
 	                            }
 	                        }
@@ -515,7 +513,8 @@ public abstract class Literal extends DefaultTerm implements LogicalFormula {
 
 
     private void useDerefVars(Term p, Unifier un) {
-        if (p instanceof Literal l) {
+        if (p instanceof Literal) {
+        	Literal l = (Literal)p;
         	for (int i=0; i<l.getArity(); i++) {
                 var t = l.getTerm(i);
                 if (t.isVar()) {
@@ -690,7 +689,7 @@ public abstract class Literal extends DefaultTerm implements LogicalFormula {
         }
         protected int calcHashCode() {
             return getFunctor().hashCode();
-        }
+        };
 
         @Override
         public Term capply(Unifier u) {
@@ -711,8 +710,10 @@ public abstract class Literal extends DefaultTerm implements LogicalFormula {
         public boolean equals(Object o) {
             if (o == null) return false;
             if (o == this) return true;
-            if (o instanceof Atom a)
+            if (o instanceof Atom) {
+            	Atom a = (Atom)o;
                 return a.isAtom() && getFunctor().equals(a.getFunctor());
+            }
             return false;
         }
 
